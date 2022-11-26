@@ -1,0 +1,66 @@
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
+
+[project]
+authors = [{name = "Edoardo Arnaudo", email = "edoardo.arn@gmail.com"}]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Topic :: Software Development",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Typing :: Typed",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+  "pydantic[dotenv] >= 1.10.0",
+]
+dynamic = ["version", "description"]
+license = {file = "LICENSE"}
+name = "argdantic"
+readme = "README.md"
+
+[project.urls]
+Home = "https://github.com/edornd"
+
+[project.optional-dependencies]
+dev = [
+  "black >= 22.6.0",
+  "flake8 >= 4.0.0",
+  "isort >= 5.10.0",
+]
+docs = [
+  "mkdocs >= 1.4.0",
+  "mkdocs-material >= 8.5.0",
+]
+test = [
+  "coverage >= 6.1.2",
+  "pytest >= 6.2.5",
+  "pytest-cov >= 3.0.0",
+  "pytest-xdist >= 2.5.0",
+]
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+py_version = 39
+src_paths = ["argdantic", "tests"]
+
+[tool.flake8]
+ignore = ["E741"]
+max-line-length = 120
+
+[tool.pytest.ini_options]
+addopts = "-ra --capture=sys"
+log_cli = true
+log_cli_level = "debug"
+minversion = "6.0"
+testpaths = ["tests"]
