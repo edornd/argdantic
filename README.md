@@ -1,5 +1,5 @@
 # argdantic
-Typed command line interfaces with `argparse` and `pydantic`.
+Typed command line interfaces with `argparse` and [`pydantic`](https://github.com/pydantic/pydantic).
 
 ---
 
