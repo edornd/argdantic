@@ -2,14 +2,14 @@ import logging
 
 from pytest import CaptureFixture
 
-from argdantic import Parser
+from argdantic import ArgParser
 from argdantic.testing import CLIRunner
 
 LOG = logging.getLogger(__name__)
 
 
 def test_numerical_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def numerical_types_required_error(a: int, b: float):
@@ -23,7 +23,7 @@ def test_numerical_types_required_error(runner: CLIRunner, capsys: CaptureFixtur
 
 
 def test_numerical_types_default_values(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def numerical_types_default_values(a: int = 1, b: float = 1.0):
@@ -37,7 +37,7 @@ def test_numerical_types_default_values(runner: CLIRunner, capsys: CaptureFixtur
 
 
 def test_numerical_types(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def numerical_types(a: int = 1, b: float = 1.0):
@@ -51,7 +51,7 @@ def test_numerical_types(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_numerical_types_help(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def numerical_types_help(a: int = 1, b: float = 1.0):
@@ -65,7 +65,7 @@ def test_numerical_types_help(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_boolean_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def boolean_types_required_error(a: bool, b: bool):
@@ -79,7 +79,7 @@ def test_boolean_types_required_error(runner: CLIRunner, capsys: CaptureFixture)
 
 
 def test_boolean_types_default_values(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def boolean_types_default_values(a: bool = True, b: bool = False):
@@ -93,7 +93,7 @@ def test_boolean_types_default_values(runner: CLIRunner, capsys: CaptureFixture)
 
 
 def test_boolean_types(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def boolean_types(a: bool, b: bool):
@@ -107,7 +107,7 @@ def test_boolean_types(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_boolean_types_help(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def boolean_types_help(a: bool, b: bool):
@@ -121,7 +121,7 @@ def test_boolean_types_help(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_string_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def string_types_required_error(a: str, b: str):
@@ -135,7 +135,7 @@ def test_string_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_string_types_default_values(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def string_types_default_values(a: str = "a", b: str = "b"):
@@ -149,7 +149,7 @@ def test_string_types_default_values(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_string_types(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def string_types(a: str = "a", b: str = "b"):
@@ -163,7 +163,7 @@ def test_string_types(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_string_types_help(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def string_types_help(a: str = "a", b: str = "b"):
@@ -177,7 +177,7 @@ def test_string_types_help(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_bytes_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def bytes_types_required_error(a: bytes, b: bytes):
@@ -191,7 +191,7 @@ def test_bytes_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_bytes_types_default_values(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def bytes_types_default_values(a: bytes = b"a", b: bytes = b"b"):
@@ -205,7 +205,7 @@ def test_bytes_types_default_values(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_bytes_types(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def bytes_types(a: bytes = b"a", b: bytes = b"b"):
@@ -219,7 +219,7 @@ def test_bytes_types(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_bytes_types_help(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def bytes_types_help(a: bytes = b"a", b: bytes = b"b"):

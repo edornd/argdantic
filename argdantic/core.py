@@ -48,7 +48,7 @@ class Command:
         return parser
 
 
-class Parser:
+class ArgParser:
     def __init__(self, name: str = None) -> None:
         self.name = name
         self.entrypoint = None

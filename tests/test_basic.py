@@ -3,7 +3,7 @@ import logging
 import pytest
 from pytest import CaptureFixture
 
-from argdantic import Parser
+from argdantic import ArgParser
 from argdantic.core import Command
 from argdantic.testing import CLIRunner
 
@@ -11,7 +11,7 @@ LOG = logging.getLogger(__name__)
 
 
 def test_empty(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def empty():
@@ -25,7 +25,7 @@ def test_empty(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_repr():
-    cli = Parser()
+    cli = ArgParser()
 
     @cli.command()
     def command1():
@@ -47,7 +47,7 @@ def test_repr():
 
 
 def test_repr_named():
-    cli = Parser(name="cli")
+    cli = ArgParser(name="cli")
 
     @cli.command(name="cmd1")
     def command1():
@@ -69,7 +69,7 @@ def test_repr_named():
 
 
 def test_empty_help(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def empty():
@@ -83,7 +83,7 @@ def test_empty_help(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_missing_annotation(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     with pytest.raises(AssertionError):
 
@@ -93,7 +93,7 @@ def test_missing_annotation(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_build_entrypoint(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def empty():

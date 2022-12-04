@@ -3,14 +3,14 @@ from typing import Deque, Dict, FrozenSet, List, Literal, Sequence, Set, Tuple
 
 from pytest import CaptureFixture
 
-from argdantic import Parser
+from argdantic import ArgParser
 from argdantic.testing import CLIRunner
 
 LOG = logging.getLogger(__name__)
 
 
 def test_primitives(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def primitives(
@@ -30,7 +30,7 @@ def test_primitives(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_sequences(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def sequences(
@@ -55,7 +55,7 @@ def test_sequences(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_mappings(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def mappings(
@@ -78,7 +78,7 @@ def test_enums(runner: CLIRunner, capsys: CaptureFixture):
         GREEN = 2
         BLUE = 3
 
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def enums(a: Literal["yellow", "purple"] = "yellow", b: Color = Color.RED):
@@ -92,7 +92,7 @@ def test_enums(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_primitives_help(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def primitives(
@@ -120,7 +120,7 @@ def test_primitives_help(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_sequences_help(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def sequences(
@@ -156,7 +156,7 @@ def test_sequences_help(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_mappings_help(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def mappings(
@@ -187,7 +187,7 @@ def test_enums_help(runner: CLIRunner, capsys: CaptureFixture):
         GREEN = 2
         BLUE = 3
 
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def enums(a: Literal["yellow", "purple"] = "yellow", b: Color = Color.RED):

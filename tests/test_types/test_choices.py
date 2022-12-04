@@ -3,14 +3,14 @@ from typing import Literal
 
 from pytest import CaptureFixture
 
-from argdantic import Parser
+from argdantic import ArgParser
 from argdantic.testing import CLIRunner
 
 LOG = logging.getLogger(__name__)
 
 
 def test_literal_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def literal_types_required_error(a: Literal["a", "b", "c"]):
@@ -24,7 +24,7 @@ def test_literal_types_required_error(runner: CLIRunner, capsys: CaptureFixture)
 
 
 def test_literal_types_wrong_arg(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     @parser.command()
     def literal_types_wrong_arg(a: Literal["a", "b", "c"]):

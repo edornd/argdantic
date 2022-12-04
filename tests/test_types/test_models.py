@@ -3,14 +3,14 @@ import logging
 from pydantic import BaseModel
 from pytest import CaptureFixture
 
-from argdantic import Parser
+from argdantic import ArgParser
 from argdantic.testing import CLIRunner
 
 LOG = logging.getLogger(__name__)
 
 
 def test_pydantic_model_simple(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     class SimpleModel(BaseModel):
         a: int
@@ -28,7 +28,7 @@ def test_pydantic_model_simple(runner: CLIRunner, capsys: CaptureFixture):
 
 
 def test_pydantic_model_nested(runner: CLIRunner, capsys: CaptureFixture):
-    parser = Parser()
+    parser = ArgParser()
 
     class NestedModel(BaseModel):
         a: int

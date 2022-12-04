@@ -19,7 +19,7 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-  "pydantic[dotenv] >= 1.10.0",
+  "pydantic >= 1.10.0",
 ]
 dynamic = ["version", "description"]
 license = {file = "LICENSE"}
@@ -61,6 +61,6 @@ max-line-length = 120
 [tool.pytest.ini_options]
 addopts = "-ra --capture=sys"
 log_cli = true
-log_cli_level = "debug"
+log_cli_level = "info"
 minversion = "6.0"
 testpaths = ["tests"]

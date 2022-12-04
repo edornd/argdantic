@@ -1,7 +1,7 @@
 import sys
 from typing import Any, List, Optional
 
-from argdantic import Parser
+from argdantic import ArgParser
 
 
 class Result:
@@ -20,7 +20,7 @@ class CLIRunner:
     def __init__(self, catch_exceptions: bool = True) -> None:
         self.catch_exceptions = catch_exceptions
 
-    def invoke(self, cli: Parser, args: List[Any]) -> Any:
+    def invoke(self, cli: ArgParser, args: List[Any]) -> Any:
         command = cli._build_entrypoint()
         exception = None
         exc_info = None
