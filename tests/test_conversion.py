@@ -108,12 +108,13 @@ def test_primitives_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
-    assert "usage: primitives [-h] [--a INT] [--b FLOAT] [--c TEXT] [--d | --no-d] [--e BYTES]" in stripped_out
+    assert "usage: primitives [-h]" in stripped_out
     assert "optional arguments:" in stripped_out
     assert "--a INT" in stripped_out
     assert "--b FLOAT" in stripped_out
     assert "--c TEXT" in stripped_out
     assert "--d" in stripped_out
+    assert "--no-d" in stripped_out
     assert "--e BYTES" in stripped_out
     assert "-h, --help" in stripped_out
     assert "show this help message and exit" in stripped_out
