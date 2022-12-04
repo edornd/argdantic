@@ -199,7 +199,6 @@ def test_enums_help(runner: CLIRunner, capsys: CaptureFixture):
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
     assert "usage: enums [-h]" in stripped_out
-    assert "optional arguments:" in stripped_out
     assert "--a [yellow, purple]" in stripped_out
     assert "--b [RED, GREEN, BLUE]" in stripped_out
     assert "-h, --help" in stripped_out
