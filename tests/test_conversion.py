@@ -143,15 +143,15 @@ def test_sequences_help(runner: CLIRunner, capsys: CaptureFixture):
     stripped_out = output.out.rstrip()
     assert "usage: sequences [-h]" in stripped_out
     assert "optional arguments:" in stripped_out
-    assert "--a [TEXT [TEXT ...]]" in stripped_out
-    assert "--b [INT [INT ...]]" in stripped_out
-    assert "--c [TEXT [TEXT ...]]" in stripped_out
+    assert "--a" in stripped_out
+    assert "--b" in stripped_out
+    assert "--c" in stripped_out
     assert "--d INT FLOAT TEXT BOOL" in stripped_out
-    assert "--e [TEXT [TEXT ...]]" in stripped_out
-    assert "--f [BYTES [BYTES ...]]" in stripped_out
-    assert "--g [INT [INT ...]]" in stripped_out
-    assert "--h [INT [INT ...]]" in stripped_out
-    assert "--i [INT [INT ...]]" in stripped_out
+    assert "--e" in stripped_out
+    assert "--f" in stripped_out
+    assert "--g" in stripped_out
+    assert "--h" in stripped_out
+    assert "--i" in stripped_out
     assert "-h, --help" in stripped_out
     assert "show this help message and exit" in stripped_out
 
