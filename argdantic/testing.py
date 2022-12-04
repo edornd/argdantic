@@ -24,8 +24,9 @@ class CLIRunner:
         command = cli._build_entrypoint()
         exception = None
         exc_info = None
+        result = None
         try:
-            command(args=args)
+            result = command(args=args)
         # avoid early exit on help invocation
         except SystemExit:
             pass
@@ -36,7 +37,7 @@ class CLIRunner:
             exception = e
             exc_info = sys.exc_info()
         return Result(
-            return_value=None,
+            return_value=result,
             exception=exception,
             exc_info=exc_info,
         )

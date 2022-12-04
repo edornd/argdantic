@@ -7,7 +7,6 @@ from pydantic.utils import lenient_issubclass
 
 from argdantic.arguments import Argument
 from argdantic.convert import args_to_dict_tree, model_to_args
-from argdantic.help import CustomHelpFormatter
 
 
 class Command:
@@ -43,7 +42,6 @@ class Command:
         parser = argparse.ArgumentParser(
             prog=self.name,
             description=self.description,
-            formatter_class=CustomHelpFormatter,
         )
         for argument in self.arguments:
             argument.build(parser=parser)
@@ -61,11 +59,13 @@ class Parser:
         return f"<Parser{name}(commands={self.commands})>"
 
     def __call__(self) -> Any:
-        entrypoint = self._build_entrypoint()
-        return entrypoint()
+        if self.entrypoint is None:
+            self._build_entrypoint()
+        return self.entrypoint()
 
     def _build_entrypoint(self) -> Callable:
-        return self.commands[0]
+        self.entrypoint = self.commands[0]
+        return self.entrypoint
 
     def command(
         self,

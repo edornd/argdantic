@@ -1,8 +1,10 @@
 import logging
 
+import pytest
 from pytest import CaptureFixture
 
 from argdantic import Parser
+from argdantic.core import Command
 from argdantic.testing import CLIRunner
 
 LOG = logging.getLogger(__name__)
@@ -78,3 +80,29 @@ def test_empty_help(runner: CLIRunner, capsys: CaptureFixture):
     LOG.debug(output)
     assert output.err.rstrip() == ""
     assert "usage: empty [-h]" in output.out.rstrip()
+
+
+def test_missing_annotation(runner: CLIRunner, capsys: CaptureFixture):
+    parser = Parser()
+
+    with pytest.raises(AssertionError):
+
+        @parser.command()
+        def empty(a):
+            print(f"Hello {a}")
+
+
+def test_build_entrypoint(runner: CLIRunner, capsys: CaptureFixture):
+    parser = Parser()
+
+    @parser.command()
+    def empty():
+        print("Hello world")
+
+    try:
+        parser()
+    except SystemExit:
+        pass
+    assert parser.entrypoint is not None
+    assert parser.entrypoint.name == "empty"
+    assert isinstance(parser.entrypoint, Command)

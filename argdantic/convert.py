@@ -79,9 +79,6 @@ def args_to_dict_tree(kwargs: Dict[str, Any], internal_delimiter: str) -> Dict[s
     """
     result: Dict[str, Any] = dict()
     for name, value in kwargs.items():
-        # skip when not set
-        if value is None:
-            continue
         # split full name into parts
         parts = name.split(internal_delimiter)
         # create nested dicts corresponding to each part
