@@ -109,7 +109,6 @@ def test_primitives_help(runner: CLIRunner, capsys: CaptureFixture):
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
     assert "usage: primitives [-h]" in stripped_out
-    assert "optional arguments:" in stripped_out
     assert "--a INT" in stripped_out
     assert "--b FLOAT" in stripped_out
     assert "--c TEXT" in stripped_out
@@ -142,7 +141,6 @@ def test_sequences_help(runner: CLIRunner, capsys: CaptureFixture):
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
     assert "usage: sequences [-h]" in stripped_out
-    assert "optional arguments:" in stripped_out
     assert "--a" in stripped_out
     assert "--b" in stripped_out
     assert "--c" in stripped_out
@@ -172,7 +170,6 @@ def test_mappings_help(runner: CLIRunner, capsys: CaptureFixture):
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
     assert "usage: mappings [-h]" in stripped_out
-    assert "optional arguments:" in stripped_out
     assert "--a JSON" in stripped_out
     assert "--b JSON" in stripped_out
     assert "--c JSON" in stripped_out
