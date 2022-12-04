@@ -1,6 +1,10 @@
 # argdantic
 Typed command line interfaces with `argparse` and [`pydantic`](https://github.com/pydantic/pydantic).
 
+[![test passing](https://img.shields.io/github/workflow/status/edornd/argdantic/Test/main)](https://github.com/edornd/argdantic)
+[![coverage](https://img.shields.io/codecov/c/gh/edornd/argdantic)](https://codecov.io/gh/edornd/argdantic)
+[![pypi version](https://img.shields.io/pypi/v/argdantic)](https://pypi.org/project/argdantic/)
+[![python versions](https://img.shields.io/pypi/pyversions/argdantic)](https://github.com/edornd/argdantic)
 ---
 
 ## Features
