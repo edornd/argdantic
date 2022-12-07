@@ -1,3 +1,4 @@
+from collections import deque
 import logging
 from typing import Deque, Dict, FrozenSet, List, Literal, Sequence, Set, Tuple
 
@@ -44,13 +45,19 @@ def test_sequences(runner: CLIRunner, capsys: CaptureFixture):
         h: Sequence[int] = [1, 2, 3],
         i: Deque[int] = [1, 2, 3],
     ):
-        print(a, b, c, d, e, f, g, h, i)
+        return a, b, c, d, e, f, g, h, i
 
-    runner.invoke(parser, [])
-    output = capsys.readouterr()
-    assert (
-        output.out.rstrip() == "[] [1, 2, 3] (1, 2, 3) (1, 1.0, 'hello', True) "
-        "{'a'} {b'a'} frozenset({1, 2, 3}) [1, 2, 3] deque([1, 2, 3])"
+    result = runner.invoke(parser, [])
+    assert result.return_value == (
+        [],
+        [1, 2, 3],
+        (1, 2, 3),
+        (1, 1.0, "hello", True),
+        {"a"},
+        {b"a"},
+        frozenset({1, 2, 3}),
+        [1, 2, 3],
+        deque([1, 2, 3]),
     )
 
 
@@ -108,7 +115,7 @@ def test_primitives_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
-    assert "usage: primitives [-h]" in stripped_out
+    assert "usage" in stripped_out
     assert "--a INT" in stripped_out
     assert "--b FLOAT" in stripped_out
     assert "--c TEXT" in stripped_out
@@ -140,7 +147,7 @@ def test_sequences_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
-    assert "usage: sequences [-h]" in stripped_out
+    assert "usage" in stripped_out
     assert "--a" in stripped_out
     assert "--b" in stripped_out
     assert "--c" in stripped_out
@@ -169,7 +176,7 @@ def test_mappings_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
-    assert "usage: mappings [-h]" in stripped_out
+    assert "usage" in stripped_out
     assert "--a JSON" in stripped_out
     assert "--b JSON" in stripped_out
     assert "--c JSON" in stripped_out
@@ -195,7 +202,7 @@ def test_enums_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output.out)
     stripped_out = output.out.rstrip()
-    assert "usage: enums [-h]" in stripped_out
+    assert "usage" in stripped_out
     assert "--a [yellow, purple]" in stripped_out
     assert "--b [RED, GREEN, BLUE]" in stripped_out
     assert "-h, --help" in stripped_out

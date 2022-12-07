@@ -61,7 +61,8 @@ def test_numerical_types_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output)
     assert output.err.rstrip() == ""
-    assert "usage: numerical-types-help [-h] [--a INT] [--b FLOAT]" in output.out.rstrip()
+    assert "usage" in output.out.rstrip()
+    assert "[-h] [--a INT] [--b FLOAT]" in output.out.rstrip()
 
 
 def test_boolean_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
@@ -117,7 +118,8 @@ def test_boolean_types_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output)
     assert output.err.rstrip() == ""
-    assert "usage: boolean-types-help [-h] (--a | --no-a) (--b | --no-b)" in output.out.rstrip()
+    assert "usage" in output.out.rstrip()
+    assert "[-h] (--a | --no-a) (--b | --no-b)" in output.out.rstrip()
 
 
 def test_string_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
@@ -173,7 +175,8 @@ def test_string_types_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output)
     assert output.err.rstrip() == ""
-    assert "usage: string-types-help [-h] [--a TEXT] [--b TEXT]" in output.out.rstrip()
+    assert "usage:" in output.out.rstrip()
+    assert "[-h] [--a TEXT] [--b TEXT]" in output.out.rstrip()
 
 
 def test_bytes_types_required_error(runner: CLIRunner, capsys: CaptureFixture):
@@ -229,4 +232,5 @@ def test_bytes_types_help(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     LOG.debug(output)
     assert output.err.rstrip() == ""
-    assert "usage: bytes-types-help [-h] [--a BYTES] [--b BYTES]" in output.out.rstrip()
+    assert "usage:" in output.out.rstrip()
+    assert "[-h] [--a BYTES] [--b BYTES]" in output.out.rstrip()

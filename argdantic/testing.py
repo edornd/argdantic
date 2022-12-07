@@ -21,12 +21,11 @@ class CLIRunner:
         self.catch_exceptions = catch_exceptions
 
     def invoke(self, cli: ArgParser, args: List[Any]) -> Any:
-        command = cli._build_entrypoint()
         exception = None
         exc_info = None
         result = None
         try:
-            result = command(args=args)
+            result = cli(args=args)
         # avoid early exit on help invocation
         except SystemExit:
             pass

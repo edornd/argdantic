@@ -1,5 +1,5 @@
-import argparse
 import inspect
+from argparse import ArgumentParser, Namespace
 from typing import Any, Callable, List, Optional, Sequence, Type
 
 from pydantic import BaseModel, create_model
@@ -10,6 +10,12 @@ from argdantic.convert import args_to_dict_tree, model_to_args
 
 
 class Command:
+    """
+    A command represents a single function that can be invoked from the command line.
+    It is composed of a callback function, a list of arguments, and a pydantic model
+    that is used to validate the arguments.
+    """
+
     def __init__(
         self,
         callback: Callable,
@@ -30,42 +36,99 @@ class Command:
     def __repr__(self) -> str:
         return f"<Command {self.name}>"
 
-    def __call__(self, args: List[Any] = None) -> Any:
-        parser = self.build()
-        kwargs = vars(parser.parse_args(args))
+    def __call__(self, args: Namespace) -> Any:
+        """
+        Invoke the command with the arguments already parsed by argparse,
+        and return the result, which is the return value of the callback.
+        Arguments are converted into a dictionary and passed to the pydantic model
+        for validation. The validated model is then passed to the callback.
+
+        Args:
+            args (Namespace): parsed arguments provided by argparse.
+
+        Returns:
+            Any: return value of the callback.
+        """
+        kwargs = vars(args)
         raw_data = args_to_dict_tree(kwargs, self.delimiter)
         validated = self.model_class(**raw_data)
-        desctructured = {k: getattr(validated, k) for k in validated.__fields__.keys()}
-        return self.callback(**desctructured)
+        destructured = {k: getattr(validated, k) for k in validated.__fields__.keys()}
+        return self.callback(**destructured)
 
-    def build(self) -> argparse.ArgumentParser:
-        parser = argparse.ArgumentParser(
-            prog=self.name,
-            description=self.description,
-        )
+    def build(self, parser: ArgumentParser) -> None:
+        """
+        Build the command by adding all arguments to the parser.
+
+        Args:
+            parser (ArgumentParser): parser to add the arguments to.
+        """
         for argument in self.arguments:
             argument.build(parser=parser)
-        return parser
+        parser.set_defaults(func=self)
 
 
 class ArgParser:
-    def __init__(self, name: str = None) -> None:
-        self.name = name
-        self.entrypoint = None
-        self.commands = []
+    """
+    A parser is a collection of commands and subparsers.
+    It is responsible for building the entrypoint for the command line interface,
+    and invoking the correct command by constructing the parser hierarchy.
+    """
+
+    def __init__(self, name: str = None, description: str = None, force_command: bool = False) -> None:
+        self.name: str = name
+        self.entrypoint: ArgumentParser = None
+        self.commands: List[Command] = []
+        self.groups: List[ArgParser] = []
+        self.description = description
+        self.force_command = force_command
 
     def __repr__(self) -> str:
         name = f" '{self.name}'" if self.name else ""
         return f"<Parser{name}(commands={self.commands})>"
 
-    def __call__(self) -> Any:
-        if self.entrypoint is None:
-            self._build_entrypoint()
-        return self.entrypoint()
+    def __call__(self, args: Sequence[Any] = None) -> Any:
+        """
+        Invoke the parser by building the entrypoint and parsing the arguments.
+        The result is the return value of the callback of the invoked command.
 
-    def _build_entrypoint(self) -> Callable:
-        self.entrypoint = self.commands[0]
-        return self.entrypoint
+        Args:
+            args (Sequence[Any], optional): arguments to parse. Defaults to None.
+
+        Returns:
+            Any: return value of the callback.
+        """
+        if self.entrypoint is None:
+            self.entrypoint = self._build_entrypoint()
+        args = self.entrypoint.parse_args(args)
+        return args.func(args)
+
+    def _build_entrypoint(self, parser: ArgumentParser = None) -> Callable:
+        """
+        Construct the entrypoint for the command line interface. This is a recursive
+        function that builds the entrypoint for the current parser and all subparsers.
+
+        Args:
+            parser (ArgumentParser, optional): Current parser to pass around. Defaults to None.
+
+        Returns:
+            Callable: the main parser to be invoked as root.
+        """
+        assert self.commands or self.groups, "Parser must have at least one command or group of commands"
+        # if the root parser is not provided, create a new one
+        if parser is None:
+            parser = ArgumentParser(prog=self.name, description=self.description)
+        for group in self.groups:
+            group._build_entrypoint(parser=parser)
+        # then build the entrypoint for the current parser
+        if len(self.commands) > 1 or self.force_command:
+            subparsers = parser.add_subparsers(help="test")
+            for command in self.commands:
+                subparser = subparsers.add_parser(command.name, help=command.description)
+                command.build(parser=subparser)
+        else:
+            assert len(self.commands) == 1, "Only one command can be used without subparsers"
+            self.commands[0].build(parser=parser)
+        return parser
 
     def command(
         self,
@@ -74,6 +137,17 @@ class ArgParser:
         delimiter: str = ".",
         internal_delimiter: str = "__",
     ) -> Callable:
+        """Decorator to register a function as a command.
+
+        Args:
+            name (str, optional): Name of the command. Defaults to the function name when not provided.
+            help (str, optional): Help text for the command. Defaults to the function docstring when not provided.
+            delimiter (str, optional): Custom delimiter character. Defaults to ".".
+            internal_delimiter (str, optional): Custom internal delimiter. Defaults to "__".
+
+        Returns:
+            Callable: The same function, promoted to a command.
+        """
         assert (
             internal_delimiter.isidentifier()
         ), f"The internal delimiter {internal_delimiter} is not a valid identifier"
