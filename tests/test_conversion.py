@@ -1,5 +1,5 @@
-from collections import deque
 import logging
+from collections import deque
 from typing import Deque, Dict, FrozenSet, List, Literal, Sequence, Set, Tuple
 
 from pytest import CaptureFixture
