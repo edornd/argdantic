@@ -1,7 +1,7 @@
 # argdantic
 Typed command line interfaces with `argparse` and [`pydantic`](https://github.com/pydantic/pydantic).
 
-[![test passing](https://img.shields.io/github/workflow/status/edornd/argdantic/Test/main)](https://github.com/edornd/argdantic)
+[![test passing](https://img.shields.io/github/workflow/status/edornd/argdantic/test/main)](https://github.com/edornd/argdantic)
 [![coverage](https://img.shields.io/codecov/c/gh/edornd/argdantic)](https://codecov.io/gh/edornd/argdantic)
 [![pypi version](https://img.shields.io/pypi/v/argdantic)](https://pypi.org/project/argdantic/)
 [![python versions](https://img.shields.io/pypi/pyversions/argdantic)](https://github.com/edornd/argdantic)
@@ -51,11 +51,3 @@ This gives us the required arguments for the execution:
 $ python cli.py --name apples --quantity 10 --price 3.4
 > Bought 10 apples at $3.40.
 ```
-
-##
-
-
-
-
-
-
