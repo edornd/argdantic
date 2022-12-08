@@ -1,6 +1,6 @@
 import inspect
-from argparse import ArgumentParser, Namespace
-from typing import Any, Callable, List, Optional, Sequence, Type
+from argparse import ArgumentParser, Namespace, _SubParsersAction
+from typing import Any, Callable, List, Optional, Sequence, Type, TypeVar
 
 from pydantic import BaseModel, create_model
 from pydantic.utils import lenient_issubclass
@@ -67,6 +67,9 @@ class Command:
         parser.set_defaults(func=self)
 
 
+ParserType = TypeVar("ParserType", bound="ArgParser")
+
+
 class ArgParser:
     """
     A parser is a collection of commands and subparsers.
@@ -74,13 +77,14 @@ class ArgParser:
     and invoking the correct command by constructing the parser hierarchy.
     """
 
-    def __init__(self, name: str = None, description: str = None, force_command: bool = False) -> None:
+    def __init__(self, name: str = None, description: str = None, force_group: bool = False) -> None:
         self.name: str = name
         self.entrypoint: ArgumentParser = None
         self.commands: List[Command] = []
-        self.groups: List[ArgParser] = []
+        self.groups: List[ParserType] = []
         self.description = description
-        self.force_command = force_command
+        self.force_group = force_group
+        self._subparser: _SubParsersAction = None
 
     def __repr__(self) -> str:
         name = f" '{self.name}'" if self.name else ""
@@ -102,7 +106,21 @@ class ArgParser:
         args = self.entrypoint.parse_args(args)
         return args.func(args)
 
-    def _build_entrypoint(self, parser: ArgumentParser = None) -> Callable:
+    def _get_subparser(self, parser: ArgumentParser, *, destination: str = "group") -> _SubParsersAction:
+        """
+        Get the subparser for the current parser. If it does not exist, create it.
+
+        Args:
+            destination (str, optional): destination of the subparser. Defaults to "group".
+
+        Returns:
+            _SubParsersAction: subparser.
+        """
+        if self._subparser is None:
+            self._subparser = parser.add_subparsers(dest=destination, required=True)
+        return self._subparser
+
+    def _build_entrypoint(self, parser: ArgumentParser = None, level: int = 0) -> ArgumentParser:
         """
         Construct the entrypoint for the command line interface. This is a recursive
         function that builds the entrypoint for the current parser and all subparsers.
@@ -115,19 +133,24 @@ class ArgParser:
         """
         assert self.commands or self.groups, "Parser must have at least one command or group of commands"
         # if the root parser is not provided, create a new one
+        # else, create a subparser for the current parser
         if parser is None:
             parser = ArgumentParser(prog=self.name, description=self.description)
-        for group in self.groups:
-            group._build_entrypoint(parser=parser)
+
         # then build the entrypoint for the current parser
-        if len(self.commands) > 1 or self.force_command:
-            subparsers = parser.add_subparsers(help="test")
+        if len(self.commands) == 1 and not self.groups and not self.force_group:
+            self.commands[0].build(parser=parser)
+        else:
+            subparsers = self._get_subparser(parser, destination=f"group{level}")
             for command in self.commands:
                 subparser = subparsers.add_parser(command.name, help=command.description)
                 command.build(parser=subparser)
-        else:
-            assert len(self.commands) == 1, "Only one command can be used without subparsers"
-            self.commands[0].build(parser=parser)
+
+        # last, build the entrypoint for all subparsers
+        for group in self.groups:
+            sublevel = level + 1
+            subparser = self._get_subparser(parser, destination=f"group{sublevel}")
+            group._build_entrypoint(parser=subparser.add_parser(group.name, help=group.description), level=sublevel)
         return parser
 
     def command(
@@ -186,3 +209,15 @@ class ArgParser:
             return command
 
         return decorator
+
+    def add_parser(self, parser: ParserType, name: str = None) -> None:
+        """
+        Add a subparser to the current parser.
+
+        Args:
+            parser (ArgParser): subparser to add.
+        """
+        assert parser.name or name, "The given subparser must have a name"
+        if name:
+            parser.name = name
+        self.groups.append(parser)
