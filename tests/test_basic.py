@@ -2,9 +2,10 @@ import argparse
 import logging
 
 import pytest
+from pydantic import BaseModel, Field
 from pytest import CaptureFixture
 
-from argdantic import ArgParser
+from argdantic import ArgField, ArgParser
 from argdantic.testing import CLIRunner
 
 LOG = logging.getLogger(__name__)
@@ -262,3 +263,170 @@ def test_add_parser_pass_name(runner: CLIRunner, capsys: CaptureFixture):
     output = capsys.readouterr()
     assert output.err.rstrip() == ""
     assert output.out.rstrip() == "Hello world 2"
+
+
+def test_pydantic_model(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str
+        b: int
+
+    @parser.command()
+    def empty(cfg: Config):
+        print(f"{cfg.a} {cfg.b}")
+
+    runner.invoke(parser, ["--cfg.a=hello", "--cfg.b=42"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert output.err.rstrip() == ""
+    assert output.out.rstrip() == "hello 42"
+
+
+def test_field_description(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str = Field(description="A string")
+        b: int = Field(description="An integer")
+
+    @parser.command()
+    def empty(cfg: Config):
+        print(f"{cfg.a} {cfg.b}")
+
+    runner.invoke(parser, ["--help"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert output.err.rstrip() == ""
+    assert "A string" in output.out.rstrip()
+    assert "An integer" in output.out.rstrip()
+
+
+def test_field_default(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str = Field("hello")
+        b: int = Field(42)
+
+    @parser.command()
+    def empty(cfg: Config):
+        print(f"{cfg.a} {cfg.b}")
+
+    runner.invoke(parser, [])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert output.err.rstrip() == ""
+    assert output.out.rstrip() == "hello 42"
+
+
+def test_field_defaults_new_values(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str = Field("hello")
+        b: int = Field(42)
+
+    @parser.command()
+    def empty(cfg: Config):
+        print(f"{cfg.a} {cfg.b}")
+
+    runner.invoke(parser, ["--cfg.a=world", "--cfg.b=43"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert output.err.rstrip() == ""
+    assert output.out.rstrip() == "world 43"
+
+
+def test_arg_field(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str = ArgField(default="hello", description="A string")
+        b: int = ArgField(default=42, description="An integer")
+
+    @parser.command()
+    def empty(cfg: Config):
+        print(f"{cfg.a} {cfg.b}")
+
+    runner.invoke(parser, ["--help"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert output.err.rstrip() == ""
+    assert "A string" in output.out.rstrip()
+    assert "An integer" in output.out.rstrip()
+    runner.invoke(parser, ["--cfg.a=world", "--cfg.b=43"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert output.err.rstrip() == ""
+    assert output.out.rstrip() == "world 43"
+
+
+def test_arg_field_in_function(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    @parser.command()
+    def empty(
+        a: str = ArgField(default="hello", description="A string"),
+        b: int = ArgField(default=42, description="An integer"),
+    ):
+        print(f"{a} {b}")
+
+    runner.invoke(parser, ["--help"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert output.err.rstrip() == ""
+    assert "A string" in output.out.rstrip()
+    assert "An integer" in output.out.rstrip()
+    runner.invoke(parser, ["--a=world", "--b=43"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert output.err.rstrip() == ""
+    assert output.out.rstrip() == "world 43"
+
+
+def test_arg_field_names(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str = ArgField("--foo", "-f", default="hello", description="A string")
+        b: int = ArgField("--bar", "-b", default=42, description="An integer")
+
+    @parser.command()
+    def empty(cfg: Config):
+        print(f"{cfg.a} {cfg.b}")
+
+    runner.invoke(parser, ["--help"])
+    output = capsys.readouterr()
+    stripped = output.out.rstrip()
+    LOG.debug(stripped)
+    assert output.err.rstrip() == ""
+    assert "--cfg.a" in stripped
+    assert "--cfg.b" in stripped
+    assert "--foo" in stripped
+    assert "--bar" in stripped
+    assert "-f" in stripped
+    assert "-b" in stripped
+    assert "A string" in stripped
+    assert "An integer" in stripped
+
+    runner.invoke(parser, ["--cfg.a=world", "--cfg.b=43"])
+    output = capsys.readouterr()
+    stripped = output.out.rstrip()
+    LOG.debug(stripped)
+    assert output.err.rstrip() == ""
+    assert stripped == "world 43"
+
+    runner.invoke(parser, ["--foo=world", "--bar=43"])
+    output = capsys.readouterr()
+    stripped = output.out.rstrip()
+    LOG.debug(stripped)
+    assert output.err.rstrip() == ""
+    assert stripped == "world 43"
+
+    runner.invoke(parser, ["-f=world", "-b=43"])
+    output = capsys.readouterr()
+    stripped = output.out.rstrip()
+    LOG.debug(stripped)
+    assert output.err.rstrip() == ""
+    assert stripped == "world 43"
