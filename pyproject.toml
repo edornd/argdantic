@@ -51,7 +51,7 @@ json = [
   "orjson >= 3.6.4, < 4.0",
 ]
 test = [
-  "coverage >= 6.1.2, < 6.2",
+  "coverage >= 6.1.2, < 7.0",
   "mock >= 4.0.0, < 5.0",
   "pytest >= 6.2.5, < 7.0",
   "pytest-cov >= 3.0.0, < 3.2",
