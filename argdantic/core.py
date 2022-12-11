@@ -3,10 +3,11 @@ from argparse import ArgumentParser, Namespace, _SubParsersAction
 from typing import Any, Callable, List, Optional, Sequence, Type, TypeVar
 
 from pydantic import BaseModel, create_model
+from pydantic.env_settings import BaseSettings, SettingsSourceCallable
 from pydantic.utils import lenient_issubclass
 
-from argdantic.arguments import Argument
 from argdantic.convert import args_to_dict_tree, model_to_args
+from argdantic.parsing import Argument
 
 
 class Command:
@@ -32,6 +33,7 @@ class Command:
         self.model_class = model_class
         self.delimiter = delimiter
         self.arguments = arguments or []
+        self.trackers = {}
 
     def __repr__(self) -> str:
         return f"<Command {self.name}>"
@@ -50,7 +52,12 @@ class Command:
             Any: return value of the callback.
         """
         kwargs = vars(args)
-        raw_data = args_to_dict_tree(kwargs, self.delimiter)
+        raw_data = args_to_dict_tree(
+            kwargs,
+            internal_delimiter=self.delimiter,
+            remove_helpers=True,
+            cli_trackers=self.trackers,
+        )
         validated = self.model_class(**raw_data)
         destructured = {k: getattr(validated, k) for k in validated.__fields__.keys()}
         return self.callback(**destructured)
@@ -63,8 +70,9 @@ class Command:
             parser (ArgumentParser): parser to add the arguments to.
         """
         for argument in self.arguments:
-            argument.build(parser=parser)
-        parser.set_defaults(func=self)
+            tracker = argument.build(parser=parser)
+            self.trackers[argument.identifier] = tracker
+        parser.set_defaults(__func__=self)
 
 
 ParserType = TypeVar("ParserType", bound="ArgParser")
@@ -77,13 +85,28 @@ class ArgParser:
     and invoking the correct command by constructing the parser hierarchy.
     """
 
-    def __init__(self, name: str = None, description: str = None, force_group: bool = False) -> None:
+    def __init__(
+        self,
+        name: str = None,
+        description: str = None,
+        force_group: bool = False,
+        delimiter: str = ".",
+        internal_delimiter: str = "__",
+    ) -> None:
         self.name: str = name
         self.entrypoint: ArgumentParser = None
-        self.commands: List[Command] = []
-        self.groups: List[ParserType] = []
         self.description = description
         self.force_group = force_group
+        self.commands: List[Command] = []
+        self.groups: List[ParserType] = []
+        # internal variables
+        assert (
+            internal_delimiter.isidentifier()
+        ), f"The internal delimiter {internal_delimiter} is not a valid identifier"
+        self._delimiter = delimiter
+        self._internal_delimiter = internal_delimiter
+        # keeping a reference to subparser is necessary to add subparsers
+        # Each cli level can only have one subparser.
         self._subparser: _SubParsersAction = None
 
     def __repr__(self) -> str:
@@ -104,7 +127,7 @@ class ArgParser:
         if self.entrypoint is None:
             self.entrypoint = self._build_entrypoint()
         args = self.entrypoint.parse_args(args)
-        return args.func(args)
+        return args.__func__(args)
 
     def _get_subparser(self, parser: ArgumentParser, *, destination: str = "group") -> _SubParsersAction:
         """
@@ -141,7 +164,7 @@ class ArgParser:
         if len(self.commands) == 1 and not self.groups and not self.force_group:
             self.commands[0].build(parser=parser)
         else:
-            subparsers = self._get_subparser(parser, destination=f"group{level}")
+            subparsers = self._get_subparser(parser, destination=f"__group{level}__")
             for command in self.commands:
                 subparser = subparsers.add_parser(command.name, help=command.description)
                 command.build(parser=subparser)
@@ -149,7 +172,7 @@ class ArgParser:
         # last, build the entrypoint for all subparsers
         for group in self.groups:
             sublevel = level + 1
-            subparser = self._get_subparser(parser, destination=f"group{sublevel}")
+            subparser = self._get_subparser(parser, destination=f"__group{sublevel}__")
             group._build_entrypoint(parser=subparser.add_parser(group.name, help=group.description), level=sublevel)
         return parser
 
@@ -157,8 +180,7 @@ class ArgParser:
         self,
         name: Optional[str] = None,
         help: Optional[str] = None,
-        delimiter: str = ".",
-        internal_delimiter: str = "__",
+        sources: List[SettingsSourceCallable] = None,
     ) -> Callable:
         """Decorator to register a function as a command.
 
@@ -171,9 +193,7 @@ class ArgParser:
         Returns:
             Callable: The same function, promoted to a command.
         """
-        assert (
-            internal_delimiter.isidentifier()
-        ), f"The internal delimiter {internal_delimiter} is not a valid identifier"
+        assert sources is None or isinstance(sources, list), "Sources must be a list of callables"
 
         def decorator(f: Callable) -> Command:
             # create a name or use the provided one
@@ -192,9 +212,40 @@ class ArgParser:
                     default_value = param.default if param.default is not inspect.Parameter.empty else Ellipsis
                     wrapped_fields[param_name] = (param.annotation, default_value)
 
-            cfg_class = create_model("WrapperModel", **wrapped_fields)
+            # set the base Model and Config class
+            model_class = None
+            if sources:
+
+                class SourceConfig(BaseSettings.Config):
+                    # patch the config class so that pydantic functionality remains
+                    # the same, but the sources are properly initialized
+
+                    @classmethod
+                    def customise_sources(
+                        self,
+                        init_settings: SettingsSourceCallable,
+                        env_settings: SettingsSourceCallable,
+                        file_secret_settings: SettingsSourceCallable,
+                    ):
+                        # cheeky way to harmonize the sources inside the config class:
+                        # this is needed to make sure that the config class is properly
+                        # initialized with the sources declared by the user on CLI init.
+                        # Env and file sources are discarded, the user must provide them explicitly.
+                        return (init_settings, *sources)
+
+                for source in sources:
+                    if hasattr(source, "inject"):
+                        source.inject(SourceConfig)
+                BaseSettings.__config__ = SourceConfig
+                model_class = BaseSettings
+
+            cfg_class = create_model(
+                "WrapperModel",
+                **wrapped_fields,
+                __base__=model_class,
+            )
             assert lenient_issubclass(cfg_class, BaseModel), "Configuration must be a pydantic model"
-            arguments = model_to_args(cfg_class, delimiter, internal_delimiter)
+            arguments = model_to_args(cfg_class, self._delimiter, self._internal_delimiter)
 
             command = Command(
                 callback=f,
@@ -202,7 +253,7 @@ class ArgParser:
                 model_class=cfg_class,
                 name=command_name,
                 description=command_help,
-                delimiter=internal_delimiter,
+                delimiter=self._internal_delimiter,
             )
             # add command to current CLI list and return it
             self.commands.append(command)

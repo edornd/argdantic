@@ -30,20 +30,35 @@ readme = "README.md"
 Home = "https://github.com/edornd"
 
 [project.optional-dependencies]
+all = [
+  "python-dotenv >= 0.19.0, < 1.0",
+  "orjson >= 3.6.4, < 4.0",
+  "tomli >= 2.0, < 3.0",
+]
 dev = [
   "black >= 22.6.0",
   "flake8 >= 4.0.0",
   "isort >= 5.10.0",
 ]
 docs = [
-  "mkdocs >= 1.4.0",
-  "mkdocs-material >= 8.5.0",
+  "mkdocs >= 1.4.0, < 2.0",
+  "mkdocs-material >= 8.5.0, < 9.0",
+]
+env = [
+  "python-dotenv >= 0.19.0, < 1.0",
+]
+json = [
+  "orjson >= 3.6.4, < 4.0",
 ]
 test = [
-  "coverage >= 6.1.2",
-  "pytest >= 6.2.5",
-  "pytest-cov >= 3.0.0",
-  "pytest-xdist >= 2.5.0",
+  "coverage >= 6.1.2, < 6.2",
+  "mock >= 4.0.0, < 5.0",
+  "pytest >= 6.2.5, < 7.0",
+  "pytest-cov >= 3.0.0, < 3.2",
+  "pytest-xdist >= 2.5.0, < 3.0",
+]
+toml = [
+  "tomli >= 2.0, < 3.0",
 ]
 
 [tool.black]
