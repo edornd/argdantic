@@ -37,12 +37,12 @@ class EnvSettingsSource(PydanticEnvSource):
     def __init__(
         self,
         env_file: Optional[DotenvType],
-        env_file_encoding: Optional[str],
-        env_nested_delimiter: Optional[str] = None,
-        env_prefix: str = None,
+        env_file_encoding: Optional[str] = "utf-8",
+        env_nested_delimiter: Optional[str] = "__",
+        env_prefix: str = "",
         env_case_sensitive: bool = False,
     ):
-        super().__init__(env_file, env_file_encoding, env_nested_delimiter, len(env_prefix) if env_prefix else 0)
+        super().__init__(env_file, env_file_encoding, env_nested_delimiter, len(env_prefix))
         self.env_prefix = env_prefix
         self.case_sensitive = env_case_sensitive
 
