@@ -310,7 +310,7 @@ def test_field_default(runner: CLIRunner, capsys: CaptureFixture):
         b: int = Field(42)
 
     @parser.command()
-    def empty(cfg: Config):
+    def empty(cfg: Config = Config()):
         print(f"{cfg.a} {cfg.b}")
 
     runner.invoke(parser, [])
