@@ -5,6 +5,7 @@ Typed command line interfaces with `argparse` and [`pydantic`](https://github.co
 [![coverage](https://img.shields.io/codecov/c/gh/edornd/argdantic)](https://codecov.io/gh/edornd/argdantic)
 [![pypi version](https://img.shields.io/pypi/v/argdantic)](https://pypi.org/project/argdantic/)
 [![python versions](https://img.shields.io/pypi/pyversions/argdantic)](https://github.com/edornd/argdantic)
+[![license](https://img.shields.io/github/license/edornd/argdantic)](https://github.com/edornd/argdantic)
 ---
 
 ## Features
@@ -15,7 +16,9 @@ Typed command line interfaces with `argparse` and [`pydantic`](https://github.co
 - **Nested commands:** combine commands and build complex hierarchies to build complex interfaces.
 - **Validation by default:** thanks to `pydantic`, field validation is provided by default, with the desired complexity.
 
-## A Simple Example
+## Quickstart
+
+### A Simple Example
 
 Creating a CLI with `argdantic` can be as simple as:
 ```python
@@ -51,3 +54,73 @@ This gives us the required arguments for the execution:
 $ python cli.py --name apples --quantity 10 --price 3.4
 > Bought 10 apples at $3.40.
 ```
+
+### Using Models
+
+Plain arguments and `pydantic` models can be mixed together:
+```python
+from argdantic import ArgParser
+from pydantic import BaseModel
+
+parser = ArgParser()
+
+
+class Item(BaseModel):
+    name: str
+    price: float
+
+
+@parser.command()
+def buy(item: Item, quantity: int):
+    print(f"Bought {quantity} X {item.name} at ${item.price:.2f}.")
+
+if __name__ == "__main__":
+    parser()
+```
+
+This will produce the following help:
+```console
+usage: cli.py [-h] --item.name TEXT --item.price FLOAT --quantity INT
+
+optional arguments:
+  -h, --help          show this help message and exit
+  --item.name TEXT
+  --item.price FLOAT
+  --quantity INT
+```
+
+### Arguments From Different Sources
+
+`argdantic` supports several inputs:
+- **`.env` files**, environment variables, and secrets thanks to *pydantic*.
+- **JSON files**, using either the standard `json` library, or `orjson` if available.
+- **YAML files**, using the `pyyaml` library.
+- **TOML files**, using the lightweight `tomli` library.
+
+Sources can be imported and added to each command independently, as such:
+
+```python
+from argdantic import ArgParser
+from argdantic.sources import EnvSettingsSource, JsonSettingsSource
+
+parser = ArgParser()
+
+
+@parser.command(
+    sources=[
+        EnvSettingsSource(env_file=".env", env_file_encoding="utf-8"),
+        JsonSettingsSource(path="settings.json"),
+    ]
+)
+def sell(item: str, quantity: int, value: float):
+    print(f"Selling: {item} x {quantity}, {value:.2f}$")
+
+
+if __name__ == "__main__":
+    parser()
+```
+
+Detailed information can be found in the [documentation](#quickstart).
+
+## Contributing
+Contributions are welcome! You can open a new issue to report bugs, or suggest new features. If you're brave enough, pull requests are also welcome.
