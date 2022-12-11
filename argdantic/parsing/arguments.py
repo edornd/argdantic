@@ -5,14 +5,54 @@ from argparse import ArgumentParser
 from collections import abc, deque
 from enum import Enum
 
+from argdantic.parsing.actions import (
+    Action,
+    AppendAction,
+    StoreAction,
+    StoreFalseAction,
+    StoreTrueAction,
+)
 from argdantic.registry import Registry
 from argdantic.utils import is_container
 
 registry = Registry()
 
 
+class ActionTracker:
+    """
+    Action tracker for argparse actions. This class is used to track if an action has been
+    specified or not. This is useful for determining if an argument has been set or not using the CLI.
+    """
+
+    def __init__(self, action_class: Action) -> None:
+        self.action_class = action_class
+        self.action = None
+
+    def __call__(self, option_strings: t.Sequence[str], dest: str, **kwargs) -> t.Any:
+        self.action = self.action_class(option_strings, dest, **kwargs)
+        return self.action
+
+    def is_set(self) -> bool:
+        return self.action is not None and self.action.specified
+
+
+class MultiActionTracker:
+    """
+    Multi action tracker for argparse actions. This class is used to track if an action has been
+    specified or not. Compared to the ActionTracker, this class is used for actions that can be
+    specified multiple times.
+    """
+
+    def __init__(self, trackers: ActionTracker) -> None:
+        self.trackers = trackers
+
+    def is_set(self) -> bool:
+        return any(tracker.is_set() for tracker in self.trackers)
+
+
 class Argument(ABC):
-    """Base class for all argument types. This class is not meant to be used directly, but rather
+    """
+    Base class for all argument types. This class is not meant to be used directly, but rather
     subclassed to create new argument types.
     """
 
@@ -34,8 +74,6 @@ class Argument(ABC):
         default: t.Any = None,
         required: bool = True,
         description: str = None,
-        action: str = "store",
-        **kwargs,
     ) -> None:
         super().__init__()
         self.identifier = identifier
@@ -44,27 +82,33 @@ class Argument(ABC):
         self.default = default
         self.required = required
         self.description = description
-        self.action = action
 
-    def build(self, parser: ArgumentParser, **optional_fields: dict) -> ArgumentParser:
+    def build(self, parser: ArgumentParser, *, action: Action, **optional_fields: dict) -> ArgumentParser:
+        tracker = ActionTracker(action)
         parser.add_argument(
             *self.field_names,
             dest=self.identifier,
             default=self.default,
             required=self.required,
             help=self.description,
+            action=tracker,
             **optional_fields,
         )
-        return parser
+        return tracker
 
 
 class PrimitiveArgument(Argument):
-    """Argument for primitive types, assigned as default argument type"""
+    """
+    Argument for primitive types, assigned as default argument type
+    """
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
-        # metavar=self.field_type.__name__.upper()
-        optional_fields = dict(type=self.field_type, metavar=self.NAMES[self.field_type])
-        return super().build(parser, **optional_fields)
+        return super().build(
+            parser,
+            action=StoreAction,
+            type=self.field_type,
+            metavar=self.NAMES[self.field_type],
+        )
 
 
 @registry.register(bytes)
@@ -72,22 +116,35 @@ class BytesArgument(Argument):
     """Argument for bytes type"""
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
-        optional_fields = dict(type=str.encode, metavar=self.NAMES[self.field_type])
-        return super().build(parser, **optional_fields)
+        return super().build(
+            parser,
+            action=StoreAction,
+            type=str.encode,
+            metavar=self.NAMES[self.field_type],
+        )
 
 
 @registry.register(bool)
 class FlagArgument(Argument):
-    """Argument for a boolean flag. If the flag is present, the value is True, otherwise False"""
+    """
+    Argument for a boolean flag. If the flag is present, the value is True, otherwise False
+    """
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
+        # create a group with two mutually exclusive arguments
         group = parser.add_mutually_exclusive_group(required=self.required)
+        # create a tracker for each argument, then create a multi-tracker to track both
+        tracker_true = ActionTracker(StoreTrueAction)
+        tracker_false = ActionTracker(StoreFalseAction)
+        tracker = MultiActionTracker([tracker_true, tracker_false])
+        # add the arguments to the group and set the default value, if any
         negative_field_names = [f"--no-{name.lstrip('-')}" for name in self.field_names]
-        group.add_argument(*self.field_names, dest=self.identifier, action="store_true")
-        group.add_argument(*negative_field_names, dest=self.identifier, action="store_false")
+        group.add_argument(*self.field_names, dest=self.identifier, action=tracker_true)
+        group.add_argument(*negative_field_names, dest=self.identifier, action=tracker_false)
         default = self.default if self.default is not None else False
         parser.set_defaults(**{self.identifier: default})
-        return parser
+        # return the multi-tracker
+        return tracker
 
 
 @registry.register(
@@ -101,7 +158,8 @@ class FlagArgument(Argument):
     abc.Iterable,
 )
 class MultipleArgument(Argument):
-    """Argument that accepts multiple values.
+    """
+    Argument that accepts multiple values.
     When the field type is a container, the inner type is used to determine the type of the argument.
     For example, a field type of List[int] will result in an argument that accepts multiple integers.
     """
@@ -124,8 +182,13 @@ class MultipleArgument(Argument):
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
         field_type, nargs, metavar = self._type_and_count()
-        optional_fields = dict(type=field_type, nargs=nargs, metavar=metavar)
-        return super().build(parser, **optional_fields)
+        return super().build(
+            parser,
+            action=AppendAction,
+            type=field_type,
+            nargs=nargs,
+            metavar=metavar,
+        )
 
 
 @registry.register(
@@ -133,7 +196,8 @@ class MultipleArgument(Argument):
     Enum,
 )
 class ChoiceArgument(Argument):
-    """ChoiceArgument is a special case of MultipleArgument that has a fixed number of choices.
+    """
+    ChoiceArgument is a special case of MultipleArgument that has a fixed number of choices.
     It supports both Enum and Literal types. Overriding the *contains* and *iter* methods allows
     to use the very same class as a custom choices argument for argparse.
     """
@@ -155,12 +219,13 @@ class ChoiceArgument(Argument):
             self.value_only = True
         self.choices = [v.name for v in self.field_type]
         metavar = f"[{', '.join(self.choices)}]"
-        optional_fields = dict(
+        return super().build(
+            parser,
+            action=StoreAction,
             type=self.convert,
             metavar=metavar,
             choices=self,
         )
-        return super().build(parser, **optional_fields)
 
 
 @registry.register(
@@ -169,6 +234,14 @@ class ChoiceArgument(Argument):
     t.Mapping,
 )
 class DictArgument(Argument):
+    """
+    Argument for a dictionary type. The value is a JSON string.
+    """
+
     def build(self, parser: ArgumentParser, **optional_fields: dict) -> ArgumentParser:
-        optional_fields = dict(type=json.loads, metavar=self.NAMES[dict])
-        return super().build(parser, **optional_fields)
+        return super().build(
+            parser,
+            action=StoreAction,
+            type=json.loads,
+            metavar=self.NAMES[dict],
+        )

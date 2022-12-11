@@ -5,7 +5,7 @@ from typing import Any, Dict, Tuple, Type
 from pydantic import BaseModel, Field
 from pydantic.utils import lenient_issubclass
 
-from argdantic.arguments import PrimitiveArgument, registry
+from argdantic.parsing import ActionTracker, PrimitiveArgument, registry
 
 
 def argument_from_field(
@@ -15,6 +15,18 @@ def argument_from_field(
     internal_delimiter: str,
     parent_path: Tuple[str, ...],
 ) -> None:
+    """Converts a pydantic field to a single argument.
+
+    Args:
+        field (Field): The field to convert.
+        kebab_name (str): The kebab case name of the field.
+        delimiter (str): The delimiter to use for the argument names.
+        internal_delimiter (str): The delimiter to use for the internal names.
+        parent_path (Tuple[str, ...]): The parent path of the field.
+
+    Returns:
+        Argument: The argument.
+    """
     # this function should only deal with non-pydantic objects
     assert not lenient_issubclass(field.outer_type_, BaseModel)
     base_option_name = delimiter.join(parent_path + (kebab_name,))
@@ -44,6 +56,17 @@ def model_to_args(
     internal_delimiter: str,
     parent_path: Tuple[str, ...] = tuple(),
 ) -> ArgumentParser:
+    """Converts a pydantic model to a list of arguments.
+
+    Args:
+        model (Type[BaseModel]): The model to convert.
+        delimiter (str): The delimiter to use for the argument names.
+        internal_delimiter (str): The delimiter to use for the internal names.
+        parent_path (Tuple[str, ...], optional): The parent path. Defaults to tuple().
+
+    Returns:
+        ArgumentParser: The argument parser.
+    """
     # iterate over fields in the settings
     for field in model.__fields__.values():
         # checks on delimiters to be done
@@ -67,18 +90,33 @@ def model_to_args(
         )
 
 
-def args_to_dict_tree(kwargs: Dict[str, Any], internal_delimiter: str) -> Dict[str, Any]:
+def args_to_dict_tree(
+    kwargs: Dict[str, Any],
+    internal_delimiter: str,
+    remove_helpers: bool = True,
+    cli_trackers: Dict[str, ActionTracker] = None,
+) -> Dict[str, Any]:
     """Transforms a flat dictionary of identifiers and values back into a complex object made of nested dictionaries.
     E.g. the following input: `animal__type='dog', animal__name='roger', animal__owner__name='Mark'`
     becomes: `{animal: {name: 'roger', type: 'dog'}, owner: {name: 'Mark'}}`
+
     Args:
         kwargs (Dict[str, Any]): flat dictionary of available fields
         internal_delimiter (str): delimiter required to split fields
+        remove_helpers (bool, optional): whether to remove helper fields (e.g., __func__). Defaults to True.
+        cli_trackers (Dict[str, ActionTracker], optional): dictionary of action trackers. Defaults to None.
+
     Returns:
         Dict[str, Any]: nested dictionary of properties to be converted into pydantic models
     """
+    cli_trackers = cli_trackers or {}
     result: Dict[str, Any] = dict()
     for name, value in kwargs.items():
+        if remove_helpers and name.startswith("__"):
+            continue
+        if tracker := cli_trackers.get(name):
+            if not tracker.is_set():
+                continue
         # split full name into parts
         parts = name.split(internal_delimiter)
         # create nested dicts corresponding to each part

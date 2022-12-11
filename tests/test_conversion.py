@@ -2,12 +2,66 @@ import logging
 from collections import deque
 from typing import Deque, Dict, FrozenSet, List, Literal, Sequence, Set, Tuple
 
+import pytest
 from pytest import CaptureFixture
 
 from argdantic import ArgParser
+from argdantic.parsing.actions import (
+    AppendAction,
+    StoreAction,
+    StoreFalseAction,
+    StoreTrueAction,
+)
 from argdantic.testing import CLIRunner
 
 LOG = logging.getLogger(__name__)
+
+
+def test_store_action_init():
+    action = StoreAction(["--a"], dest="a", metavar="A", help="help")
+    assert action.option_strings == ["--a"]
+    assert action.dest == "a"
+    assert action.nargs is None
+    assert action.const is None
+    assert action.default is None
+    assert action.type is None
+    assert action.choices is None
+    assert action.required is False
+    assert action.metavar == "A"
+    assert action.help == "help"
+
+
+def test_store_true_action_init():
+    action = StoreTrueAction(["--a"], dest="a", metavar="A", help="help")
+    assert action.option_strings == ["--a"]
+    assert action.dest == "a"
+    assert action.nargs == 0
+    assert action.const is True
+    assert action.type is None
+    assert action.choices is None
+    assert action.required is False
+    assert action.metavar == "A"
+    assert action.help == "help"
+
+
+def test_store_false_action_init():
+    action = StoreFalseAction(["--a"], dest="a", metavar="A", help="help")
+    assert action.option_strings == ["--a"]
+    assert action.dest == "a"
+    assert action.nargs == 0
+    assert action.const is False
+    assert action.type is None
+    assert action.choices is None
+    assert action.required is False
+    assert action.metavar == "A"
+    assert action.help == "help"
+
+
+def test_append_action_exceptions():
+    with pytest.raises(ValueError):
+        AppendAction(["--a"], dest="a", nargs=0)
+    with pytest.raises(ValueError):
+        AppendAction(["--a"], dest="a", nargs="+", const=1)
 
 
 def test_primitives(runner: CLIRunner, capsys: CaptureFixture):
@@ -41,9 +95,9 @@ def test_sequences(runner: CLIRunner, capsys: CaptureFixture):
         d: Tuple[int, float, str, bool] = (1, 1.0, "hello", True),
         e: set = {"a"},
         f: Set[bytes] = {b"a"},
-        g: FrozenSet[int] = {1, 2, 3},
+        g: FrozenSet[int] = frozenset({1, 2, 3}),
         h: Sequence[int] = [1, 2, 3],
-        i: Deque[int] = [1, 2, 3],
+        i: Deque[int] = deque([1, 2, 3]),
     ):
         return a, b, c, d, e, f, g, h, i
 
