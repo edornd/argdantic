@@ -18,6 +18,21 @@ Typed command line interfaces with `argparse` and [`pydantic`](https://github.co
 
 ## Quickstart
 
+## Installation
+Installing `argdantic` can be done from source, or simply using `pip`.
+The only required dependency is, of course, *pydantic*, while the remaining can be selected depending on your needs:
+```console
+recommended choice: install everything
+this includes orjson, pyyaml, tomli, python-dotenv
+user@pc:~$ pip install argdantic[all]
+
+env, json, toml or yaml dependencies
+user@pc:~$ pip install[env|json|toml|yaml]
+
+minimum requirement, only pydantic included
+user@pc:~$ pip install argdantic
+```
+
 ### A Simple Example
 
 Creating a CLI with `argdantic` can be as simple as:
