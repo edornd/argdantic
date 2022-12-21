@@ -1,7 +1,7 @@
 # argdantic
 Typed command line interfaces with `argparse` and [`pydantic`](https://github.com/pydantic/pydantic).
 
-[![test passing](https://img.shields.io/github/workflow/status/edornd/argdantic/test/main)](https://github.com/edornd/argdantic)
+[![test passing](https://img.shields.io/github/actions/workflow/status/edornd/argdantic/test.yml?branch=main)](https://github.com/edornd/argdantic)
 [![coverage](https://img.shields.io/codecov/c/gh/edornd/argdantic)](https://codecov.io/gh/edornd/argdantic)
 [![pypi version](https://img.shields.io/pypi/v/argdantic)](https://pypi.org/project/argdantic/)
 [![python versions](https://img.shields.io/pypi/pyversions/argdantic)](https://github.com/edornd/argdantic)
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     parser()
 ```
 
-Detailed information can be found in the [documentation](#quickstart).
+Detailed information can be found in the [documentation](#quickstart) (which is not there yet, please bear with me).
 
 ## Contributing
 Contributions are welcome! You can open a new issue to report bugs, or suggest new features. If you're brave enough, pull requests are also welcome.
