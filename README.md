@@ -15,6 +15,7 @@ Typed command line interfaces with `argparse` and [`pydantic`](https://github.co
 - **Nested models:** exploit `pydantic` models to scale from simple primitives to complex nested configurations with little effort.
 - **Nested commands:** combine commands and build complex hierarchies to build complex interfaces.
 - **Validation by default:** thanks to `pydantic`, field validation is provided by default, with the desired complexity.
+- **Multiple sources:** arguments can be provided from multiple sources, including environment variables, JSON, TOML and YAML files.
 
 ## Quickstart
 
