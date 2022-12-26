@@ -1,7 +1,7 @@
 import json
 import typing as t
 from abc import ABC
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 from collections import abc, deque
 from enum import Enum
 
@@ -203,27 +203,44 @@ class ChoiceArgument(Argument):
     """
 
     def __contains__(self, item: t.Any) -> bool:
-        key = item if self.value_only else item.name
-        return key in self.choices
+        # The control is done after the `convert` method,
+        # so the item is already a value or an Enum member.
+        item_set = {i.value for i in self.field_type}
+        key = item if self.value_only else item.value
+        return key in item_set
 
-    def convert(self, value: t.Any) -> t.Any:
-        item = self.field_type[value]
+    def __iter__(self) -> t.Iterator:
+        return iter(self.field_type)
+
+    def __next__(self) -> t.Any:
+        return next(iter(self.field_type))
+
+    def __len__(self) -> int:
+        return len(self.choices)
+
+    def __repr__(self) -> str:
+        str_choices = [str(i.value) if self.value_only else i.name for i in self.field_type]
+        return f"[{'|'.join(str_choices)}]"
+
+    def convert(self, name: t.Any) -> t.Any:
+        try:
+            item = self.field_type[name]
+        except KeyError:
+            raise ArgumentTypeError(f"invalid choice: {name} (choose from {repr(self)})")
         if self.value_only:
             return item.value
         return item
 
-    def build(self, parser: ArgumentParser, **optional_fields: dict) -> ArgumentParser:
+    def build(self, parser: ArgumentParser) -> ArgumentParser:
         self.value_only = False
         if t.get_origin(self.field_type) is t.Literal:
-            self.field_type = Enum(self.identifier, {v: v for v in t.get_args(self.field_type)})
+            self.field_type = Enum(self.identifier, {str(v): v for v in t.get_args(self.field_type)})
             self.value_only = True
-        self.choices = [v.name for v in self.field_type]
-        metavar = f"[{', '.join(self.choices)}]"
         return super().build(
             parser,
             action=StoreAction,
             type=self.convert,
-            metavar=metavar,
+            metavar=repr(self),
             choices=self,
         )
 
@@ -238,7 +255,7 @@ class DictArgument(Argument):
     Argument for a dictionary type. The value is a JSON string.
     """
 
-    def build(self, parser: ArgumentParser, **optional_fields: dict) -> ArgumentParser:
+    def build(self, parser: ArgumentParser) -> ArgumentParser:
         return super().build(
             parser,
             action=StoreAction,

@@ -18,7 +18,7 @@ Typed command line interfaces with `argparse` and [`pydantic`](https://github.co
 
 ## Quickstart
 
-## Installation
+### Installation
 Installing `argdantic` can be done from source, or simply using `pip`.
 The only required dependency is, of course, *pydantic*, while the remaining can be selected depending on your needs:
 ```console

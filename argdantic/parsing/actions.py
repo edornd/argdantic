@@ -98,6 +98,6 @@ class AppendAction(StoreAction):
         option_string: str = ...,
     ) -> None:
         items = getattr(namespace, self.dest, None)
-        items = _copy_items(items)
+        items = list(_copy_items(items))
         items.extend(values)
         super().__call__(parser, namespace, items, option_string)
