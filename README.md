@@ -7,7 +7,7 @@ Typed command line interfaces with [`argparse`](https://docs.python.org/3/librar
 [![python versions](https://img.shields.io/pypi/pyversions/argdantic)](https://github.com/edornd/argdantic)
 
 [![license](https://img.shields.io/github/license/edornd/argdantic)](https://github.com/edornd/argdantic)
-[![documentation](https://img.shields.io/badge/ocumentation-%F0%9F%93%9A-blue)](https://edornd.github.io/argdantic/)
+[![documentation](https://img.shields.io/badge/documentation-%F0%9F%93%9A-blue)](https://edornd.github.io/argdantic/)
 ---
 
 ## Features
