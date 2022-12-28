@@ -216,7 +216,7 @@ class ChoiceArgument(Argument):
         return next(iter(self.field_type))
 
     def __len__(self) -> int:
-        return len(self.choices)
+        return len(self.field_type)
 
     def __repr__(self) -> str:
         str_choices = [str(i.value) if self.value_only else i.name for i in self.field_type]
