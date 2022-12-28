@@ -1,11 +1,13 @@
 # argdantic
-Typed command line interfaces with `argparse` and [`pydantic`](https://github.com/pydantic/pydantic).
+Typed command line interfaces with [`argparse`](https://docs.python.org/3/library/argparse.html) and [`pydantic`](https://github.com/pydantic/pydantic).
 
 [![test passing](https://img.shields.io/github/actions/workflow/status/edornd/argdantic/test.yml?branch=main)](https://github.com/edornd/argdantic)
 [![coverage](https://img.shields.io/codecov/c/gh/edornd/argdantic)](https://codecov.io/gh/edornd/argdantic)
 [![pypi version](https://img.shields.io/pypi/v/argdantic)](https://pypi.org/project/argdantic/)
 [![python versions](https://img.shields.io/pypi/pyversions/argdantic)](https://github.com/edornd/argdantic)
+
 [![license](https://img.shields.io/github/license/edornd/argdantic)](https://github.com/edornd/argdantic)
+[![documentation](https://img.shields.io/badge/ocumentation-%F0%9F%93%9A-blue)](https://edornd.github.io/argdantic/)
 ---
 
 ## Features
@@ -22,6 +24,7 @@ Typed command line interfaces with `argparse` and [`pydantic`](https://github.co
 ### Installation
 Installing `argdantic` can be done from source, or simply using `pip`.
 The only required dependency is, of course, *pydantic*, while the remaining can be selected depending on your needs:
+
 ```console
 recommended choice: install everything
 this includes orjson, pyyaml, tomli, python-dotenv
@@ -37,6 +40,7 @@ user@pc:~$ pip install argdantic
 ### A Simple Example
 
 Creating a CLI with `argdantic` can be as simple as:
+
 ```python
 from argdantic import ArgParser
 
@@ -53,6 +57,7 @@ def buy(name: str, quantity: int, price: float):
 if __name__ == "__main__":
     parser()
 ```
+
 Then, in a terminal, the `help` command can provide the usual information:
 
 ```console
@@ -65,7 +70,9 @@ $ python cli.py --help
 >   --quantity INT
 >   --price FLOAT
 ```
+
 This gives us the required arguments for the execution:
+
 ```console
 $ python cli.py --name apples --quantity 10 --price 3.4
 > Bought 10 apples at $3.40.
@@ -74,6 +81,7 @@ $ python cli.py --name apples --quantity 10 --price 3.4
 ### Using Models
 
 Plain arguments and `pydantic` models can be mixed together:
+
 ```python
 from argdantic import ArgParser
 from pydantic import BaseModel
@@ -95,6 +103,7 @@ if __name__ == "__main__":
 ```
 
 This will produce the following help:
+
 ```console
 usage: cli.py [-h] --item.name TEXT --item.price FLOAT --quantity INT
 
@@ -136,7 +145,8 @@ if __name__ == "__main__":
     parser()
 ```
 
-Detailed information can be found in the [documentation](#quickstart) (which is not there yet, please bear with me).
+This is just a brief introduction to the library, more examples and details can be found in the [documentation](https://edornd.github.io/argdantic/).
 
 ## Contributing
+
 Contributions are welcome! You can open a new issue to report bugs, or suggest new features. If you're brave enough, pull requests are also welcome.
