@@ -17,5 +17,5 @@ jobs:
         run: pip install flit
       - name: Install Dependencies
         run: python -m flit install --symlink --extras docs
-      - run: Deploy docs
-      - run: mkdocs gh-deploy --force
+      - name: Deploy docs
+        run: mkdocs gh-deploy --force
