@@ -15,8 +15,24 @@ Typed command line interfaces with `argparse` and [`pydantic`](https://github.co
 - **Nested models:** exploit `pydantic` models to scale from simple primitives to complex nested configurations with little effort.
 - **Nested commands:** combine commands and build complex hierarchies to build complex interfaces.
 - **Validation by default:** thanks to `pydantic`, field validation is provided by default, with the desired complexity.
+- **Multiple sources:** arguments can be provided from multiple sources, including environment variables, JSON, TOML and YAML files.
 
 ## Quickstart
+
+### Installation
+Installing `argdantic` can be done from source, or simply using `pip`.
+The only required dependency is, of course, *pydantic*, while the remaining can be selected depending on your needs:
+```console
+recommended choice: install everything
+this includes orjson, pyyaml, tomli, python-dotenv
+user@pc:~$ pip install argdantic[all]
+
+env, json, toml or yaml dependencies
+user@pc:~$ pip install[env|json|toml|yaml]
+
+minimum requirement, only pydantic included
+user@pc:~$ pip install argdantic
+```
 
 ### A Simple Example
 

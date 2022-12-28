@@ -1,5 +1,7 @@
+import argparse
 import logging
-from typing import Literal
+from enum import Enum
+from typing import Iterable, Literal
 
 from pytest import CaptureFixture
 
@@ -35,3 +37,19 @@ def test_literal_types_wrong_arg(runner: CLIRunner, capsys: CaptureFixture):
     LOG.debug(output)
     "error: argument --a: invalid choice: 'd' (choose from 'a', 'b', 'c')" in output.err.rstrip()
     assert output.out.rstrip() == ""
+
+
+def test_choice_iterable(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    @parser.command()
+    def choice_iterable(a: Literal["a", "b", "c"]):
+        print(a)
+
+    choice = list(choice_iterable.arguments)[0]
+    choice.build(argparse.ArgumentParser())
+    assert issubclass(choice.field_type, Enum)
+    assert len(choice) == 3
+    assert "a" in choice
+    assert next(choice) == choice.field_type.a
+    assert isinstance(iter(choice), Iterable)
