@@ -8,6 +8,34 @@ from pydantic.utils import lenient_issubclass
 from argdantic.parsing import ActionTracker, PrimitiveArgument, registry
 
 
+def format_description(description: str, has_default: bool, is_required: bool) -> str:
+    """Formats the field description, adding additional info about defaults and if it is required.
+
+    Args:
+        description (str): The description.
+        has_default (bool): If the field has a default value.
+        is_required (bool): If the field is required.
+
+    Returns:
+        str: The formatted description.
+    """
+    suffix = None
+    # if it already has a default, it is not required
+    if is_required:
+        suffix = "(required)"
+    elif has_default:
+        suffix = "(default: %(default)s)"
+    # handle cases:
+    # - when there is no prefix, return the description as is (also handles None)
+    # - when there is no description, return the prefix as is (also handles None)
+    # - when there is both, return the prefix and description
+    if suffix is None:
+        return description
+    if description is None:
+        return suffix
+    return f"{description} {suffix}"
+
+
 def argument_from_field(
     field: Field,
     kebab_name: str,
@@ -37,7 +65,9 @@ def argument_from_field(
     identifier = base_option_name.replace(delimiter, internal_delimiter).replace("-", "_")
     field_type = field.outer_type_
     field_names = (full_option_name, *extra_names)
-    field_default = field.default if field.default is not None else argparse.SUPPRESS
+    has_default = field.default is not None
+    field_default = field.default if has_default else argparse.SUPPRESS
+    description = format_description(field.field_info.description, has_default, field.required)
 
     arg_class = registry.get(field_type, PrimitiveArgument)
     return arg_class(
@@ -46,7 +76,7 @@ def argument_from_field(
         field_type=field_type,
         default=field_default,
         required=field.required,
-        description=field.field_info.description,
+        description=description,
     )
 
 
