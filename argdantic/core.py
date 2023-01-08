@@ -2,7 +2,7 @@ import inspect
 from argparse import ArgumentParser, Namespace, _SubParsersAction
 from typing import Any, Callable, List, Optional, Sequence, Type, TypeVar
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, ValidationError, create_model
 from pydantic.env_settings import BaseSettings, SettingsSourceCallable
 from pydantic.utils import lenient_issubclass
 
@@ -128,8 +128,33 @@ class ArgParser:
         """
         if self.entrypoint is None:
             self.entrypoint = self._build_entrypoint()
-        args = self.entrypoint.parse_args(args)
-        return args.__func__(args)
+        try:
+            args = self.entrypoint.parse_args(args)
+            return args.__func__(args)
+        except ValidationError as e:
+            self.entrypoint.error(self._format_validation_error(e))
+
+    def _format_validation_error(self, exception: ValidationError) -> str:
+        """
+        Format a validation error into a string, providinf a more human-readable representation.
+
+        Args:
+            exception (ValidationError): validation error raised by pydantic.
+
+        Returns:
+            str: formatted string.
+        """
+        errors = exception.errors()
+        num_errors = len(errors)
+        intro = f"{num_errors} validation {'error' if num_errors == 1 else 'errors'} while parsing arguments\n"
+        body = []
+        max_len = 0
+        for error in errors:
+            location = " -> ".join(str(e) for e in error["loc"])
+            max_len = max(max_len, len(location))
+            body.append((location, error["msg"]))
+        body = "\n".join(f"{location:<{max_len}}: {msg}" for location, msg in body)
+        return f"{intro}{body}"
 
     def _get_subparser(
         self,

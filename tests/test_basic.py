@@ -430,3 +430,29 @@ def test_arg_field_names(runner: CLIRunner, capsys: CaptureFixture):
     LOG.debug(stripped)
     assert output.err.rstrip() == ""
     assert stripped == "world 43"
+
+
+def test_validation_error(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str = ArgField("--foo", "-f", description="A string", min_length=10)
+        b: int = ArgField("--bar", "-b", description="An integer", gt=43)
+
+    @parser.command()
+    def empty(cfg: Config):
+        print(f"{cfg.a} {cfg.b}")
+
+    runner.invoke(parser, ["--cfg.a=short", "--cfg.b=42"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert "cfg -> a: ensure this value has at least 10 characters" in output.err.rstrip()
+    assert "cfg -> b: ensure this value is greater than 43" in output.err.rstrip()
+    assert output.out.rstrip() == ""
+
+    runner.invoke(parser, ["--foo=verylongname", "--bar=44"])
+    output = capsys.readouterr()
+    stripped = output.out.rstrip()
+    LOG.debug(stripped)
+    assert output.err.rstrip() == ""
+    assert stripped == "verylongname 44"
