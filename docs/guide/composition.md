@@ -38,12 +38,12 @@ $ python nested_models.py --help
 >
 > optional arguments:
 >   -h, --help            show this help message and exit
->   --item.name TEXT
+>   --item.name TEXT                (required)
 >   --item.description TEXT
->   --item.price FLOAT
->   --item.tags TEXT [TEXT ...]
->   --item.image.url TEXT
->   --item.image.name TEXT
+>   --item.price FLOAT              (required)
+>   --item.tags [TEXT [TEXT ...]]   (default: set())
+>   --item.image.url TEXT           (required)
+>   --item.image.name TEXT          (required)
 ```
 
 Executing the command with the required arguments will result in the following output:
@@ -93,15 +93,15 @@ When executing the `help` command, the following output will be produced:
 
 ```console
 $ python nested_parsers.py --help
-> usage: nested_parsers.py [-h] {users,books} ...
+> usage: nested_parsers.py [-h] <command> ...
 >
 > positional arguments:
->   {users,books}
+>   <command>
 >     users
 >     books
 >
 > optional arguments:
->   -h, --help    show this help message and exit
+>   -h, --help  show this help message and exit
 ```
 
 !!! note
@@ -113,15 +113,16 @@ The same can be done on the subgroup, calling the `help` command on the `users` 
 
 ```console
 $ python nested_parsers.py users --help
-> usage: nested_parsers.py users [-h] {add-user,delete-user} ...
+> usage: nested_parsers.py users [-h] <command> ...
 >
 > positional arguments:
->   {add-user,delete-user}
->     add-user       Adds a single user.
->     delete-user    Deletes a user by name.
+>   <command>
+>     add-user   Adds a single user.
+>     delete-user
+>                Deletes a user by name.
 >
 > optional arguments:
->   -h, --help            show this help message and exit
+>   -h, --help   show this help message and exit
 ```
 
 Finally, the `help` command can be called on the subcommand, showing the description and the arguments:
@@ -131,9 +132,9 @@ $ python nested_parsers.py users add-user --help
 > usage: nested_parsers.py users add-user [-h] --name TEXT --age INT
 >
 > optional arguments:
->   -h, --help            show this help message and exit
->   --name TEXT
->   --age INT
+>   -h, --help   show this help message and exit
+>   --name TEXT  (required)
+>   --age INT    (required)
 ```
 
 Last but not least, the command can be executed, by passing the required arguments:

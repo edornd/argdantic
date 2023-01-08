@@ -26,17 +26,23 @@ The following example shows a brief overview of the primitive types:
 With the following help message:
 ```console
 $ python primitives.py --help
-> usage: primitives.py [-h] [--name TEXT] [--age INTEGER] [--weight FLOAT] [--data BYTES] [--flag]
+> usage: primitives.py [-h] --name TEXT --age INT --weight FLOAT --data BYTES (--flag | --no-flag)
 >
 > optional arguments:
->   -h, --help            show this help message and exit
->   --name TEXT
->   --age INT
->   --weight FLOAT
->   --data BYTES
+>   -h, --help      show this help message and exit
+>   --name TEXT     (required)
+>   --age INT       (required)
+>   --weight FLOAT  (required)
+>   --data BYTES    (required)
 >   --flag
 >   --no-flag
 ```
+
+!!! note
+
+    Observe that the `--flag` and `--no-flag` options are not marked as required.
+    That is the expected behaviour: strictly speaking, _taken individually_, they are not required.
+    However, being mutually exclusive, one of either `--flag` or `--no-flag` is still needed.
 
 `argdantic`` takes care of converting the provided fields into _argparse_ arguments, so that the automatically generated description reamins as faithful as possible.
 Bear in mind that types are exploited only for documentation purposes, the final type checking will be carried out by _pydantic_.
@@ -129,19 +135,19 @@ $ python containers.py --help
 >
 > optional arguments:
 >   -h, --help            show this help message and exit
->   --simple-list TEXT [TEXT ...]
->   --list-of-ints INT [INT ...]
->   --simple-tuple TEXT [TEXT ...]
->   --multi-typed-tuple INT FLOAT TEXT BOOL
->   --simple-dict JSON
->   --dict-str-float JSON
->   --simple-set TEXT [TEXT ...]
->   --set-bytes BYTES [BYTES ...]
->   --frozen-set INT [INT ...]
->   --none-or-str TEXT
->   --sequence-of-ints INT [INT ...]
->   --compound JSON
->   --deque INT [INT ...]
+>   --simple-list TEXT [TEXT ...]           (required)
+>   --list-of-ints INT [INT ...]            (required)
+>   --simple-tuple TEXT [TEXT ...]          (required)
+>   --multi-typed-tuple INT FLOAT TEXT BOOL (required)
+>   --simple-dict JSON                      (required)
+>   --dict-str-float JSON                   (required)
+>   --simple-set TEXT [TEXT ...]            (required)
+>   --set-bytes BYTES [BYTES ...]           (required)
+>   --frozen-set INT [INT ...]              (required)
+>   --none-or-str TEXT                      (required)
+>   --sequence-of-ints INT [INT ...]        (required)
+>   --compound JSON                         (required)
+>   --deque INT [INT ...]                   (required)
 ```
 
 
@@ -180,11 +186,11 @@ $ python choices.py --help
 >
 > optional arguments:
 >   -h, --help            show this help message and exit
->   --a [one|two]
->   --b [1|2]
->   --c [True|False]
->   --d [hammer|screwdriver]
->   --e [ok|not_found|internal_error]
+>   --a [one|two]                       (default: two)
+>   --b [1|2]                           (default: 2)
+>   --c [True|False]                    (default: True)
+>   --d [hammer|screwdriver]            (default: ToolEnum.hammer)
+>   --e [ok|not_found|internal_error]   (default: HTTPEnum.not_found)
 ```
 
 You can notice that, even without explicit description,

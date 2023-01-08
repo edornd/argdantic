@@ -5,8 +5,8 @@ cli = ArgParser()
 
 @cli.command()
 def hello(
-    name: str = ArgField("-n", default="John", description="Your name"),
-    age: int = ArgField("-a", default=30, description="Your age"),
+    name: str = ArgField("-n", default="John", description="your name"),
+    age: int = ArgField("-a", default=30, description="your age"),
 ):
     """Print a greeting message."""
     print(f"Hello, {name}!")

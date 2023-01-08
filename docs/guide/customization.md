@@ -11,7 +11,7 @@ Being based on `argparse` and `pydantic`, the customization options are limitles
 
 The following sections will provide a brief overview of these options, and how to use them.
 
-## Command names
+## Command Names
 
 By default, the name of the function that is decorated with `@parser.command()` is used as the name of the command.
 This can be changed by passing a `name` argument to the decorator:
@@ -27,8 +27,8 @@ $ python main.py --help
 > usage: main.py [-h] --name TEXT
 >
 > optional arguments:
->   -h, --help      show this help message and exit
->   --name TEXT
+>  -h, --help   show this help message and exit
+>  --name TEXT  (required)
 ```
 
 **Wait a minute, where is the custom name?**
@@ -39,7 +39,7 @@ This can be changed by:
 1. Registering more than one command, the easiest option.
 2. By passing the `force_group` argument to the parser.
 
-### Multiple commands
+### Multiple Commands
 
 When more than one command is registered, its name is required to execute that specific CLI function.
 For instance, the following script:
@@ -52,13 +52,15 @@ When executed, the script will provide the following output:
 
 ```console
 $ python main.py --help
-> usage: main.py [-h] {hi,bye} ...
+> usage: main.py [-h] <command> ...
 >
 > positional arguments:
->   {hello,bye}
->     hello      Say hello.
->     bye        Say goodbye.
->   -h, --help   show this help message and exit
+>   <command>
+>     hi        Say hello.
+>     bye       Say goodbye.
+>
+> optional arguments:
+>   -h, --help  show this help message and exit
 ```
 
 The `hi` and `bye` commands are now available, and can be executed by passing their name as the first argument:
@@ -71,7 +73,7 @@ $ python main.py hi --name John
 You also probably noticed that the commands also provide a description.
 This can be customized in many ways, and will be covered in the next section.
 
-### Forced groups
+### Forced Groups
 
 The `force_group` argument can be used to force the creation of a group, even if only one command is registered.
 This can be useful if you want to force users to provide the command name upon execution.
@@ -86,14 +88,15 @@ When executed, the script will provide the following output:
 
 ```console
 $ python main.py --help
-> usage: main.py [-h] {greetings} ...
+> usage: main.py [-h] <command> ...
 >
 > positional arguments:
->   {greetings}
->     greetings  Say hello.
+>   <command>
+>     greetings
+>               Say hello.
 >
 > optional arguments:
->  -h, --help   show this help message and exit
+>   -h, --help  show this help message and exit
 ```
 
 The `greetings` command is now available, and can be executed by passing its name as the first argument:
@@ -103,7 +106,7 @@ $ python main.py greetings --name John
 > Hello, John!
 ```
 
-## Command descriptions
+## Command Descriptions
 
 You may have noticed from the previous example that the commands also provide a description.
 Descriptions can be customized in two simple ways:
@@ -127,19 +130,17 @@ When executed, the scripts will provide the following output:
 
 ```console
 $ python main.py --help
-> usage: main.py [-h] {hello} ...
+> usage: main.py [-h] <command> ...
 >
 > positional arguments:
->   {hello}
+>   <command>
 >     hello     Print a greeting message.
 >
 > optional arguments:
->  -h, --help   show this help message and exit
+>   -h, --help  show this help message and exit
 ```
 
-
-
-## Default values
+## Default Values
 
 Of course, any good CLI tool should provide the user with a way to provide default values for the fields.
 Given that defining a command is as simple as defining a function, introducing default values can also be as simple as
@@ -157,15 +158,48 @@ $ python main.py
 > You are 42 years old.
 ```
 
-!!! warning
-    Currently, the help message does not display the default values.
-    This is a known issue, and will be fixed in the future.
+The default values are also provided in the help message, so that the user is informed about them:
 
-This is a very simple example, but it can be used to provide default values for any field, including
-more complex fields such as `List`, `Dict`, and so on.
+```console
+$ python main.py --help
+> usage: main.py [-h] [--name TEXT] [--age INT]
+>
+> optional arguments:
+>   -h, --help   show this help message and exit
+>   --name TEXT  (default: World)
+>   --age INT    (default: 42)
+```
+
+### Default Values and Required Fields
+
+Of course, if a field provides a default value, it is no longer required.
+This implies that every field must be assigned in some way, either by providing it beforehand or during execution,
+which will respectively add a `default` or `required` flag to the help message.
+But, as a famous grand master once said, _there is another_: when the default is `None`, the field is neither
+marked as `default` nor `required`, so the help message will not contain any flag.
+At the time of writing, this is the only way to provide a true optional field.
+
+```python title="main.py" linenums="1" hl_lines="7"
+{!examples/customization/default_values_none.py!}
+```
+
+The help message will now look like this:
+
+```console
+$ python main.py --help
+> usage: main.py [-h] [--name TEXT] [--age INT]
+>
+> optional arguments:
+>   -h, --help   show this help message and exit
+>   --name TEXT
+>   --age INT
+```
+
+These are very simple examples, but they can be extended to any field, including
+more complex ones such as `List`, `Dict`, and so on.
 There are also a few other ways to provide default values, which will be covered in the next sections.
 
-## Field options
+## Field Options
 
 A CLI cannot be complete without a way to customize the fields.
 `argdantic` provides a way to customize the fields through the `ArgField` function, which can be seen
@@ -191,12 +225,12 @@ Executing the script with the `--help` flag will provide the following output:
 
 ```console
 $ python main.py --help
-> usage: main.py [-h] [--name TEXT] [-n TEXT] [--age INT] [-a INT]
+> usage: main.py [-h] --name TEXT --age INT
 >
 > optional arguments:
 >   -h, --help            show this help message and exit
->   --name TEXT, -n TEXT
->   --age INT, -a INT
+>   --name TEXT, -n TEXT  (required)
+>   --age INT, -a INT     (required)
 ```
 
 The message now shows to the user that the `--name` and `--n` flags are equivalent, as well as the `--age` and `--a` flags.
@@ -208,7 +242,7 @@ $ python main.py -n John -a 42
 > You are 42 years old.
 ```
 
-### Default with fields
+### Default with Fields
 
 Substituting the default value in the function signature with the `ArgField` modifier does not preclude the use
 of the default value in the function signature. This is now possible by using the `default` keyword argument:
@@ -242,11 +276,11 @@ $ python main.py --help
 >
 > optional arguments:
 >   -h, --help            show this help message and exit
->   --name TEXT, -n TEXT  Your name
->   --age INT, -a INT     Your age
+>   --name TEXT, -n TEXT  your name (default: John)
+>   --age INT, -a INT     your age (default: 30)
 ```
 
-### Other options
+### Other Options
 
 There are a few other options that can be provided to the `ArgField` modifier, which are not covered in this tutorial,
 but can be found in the `pydantic` documentation. These include, just to name a few, validators, constraints, and so on.
