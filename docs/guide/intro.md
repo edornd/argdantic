@@ -61,7 +61,7 @@ $ python main.py --name John
 > Hello, John!
 ```
 
-## Help
+## Help Messages
 
 Of course, randomly executing a command without any information is not very useful.
 The `--help` argument is automatically added to every command, and provides a summary of the command's arguments.
@@ -72,6 +72,11 @@ $ python main.py --help
 > usage: main.py [-h] --name TEXT
 >
 > optional arguments:
->   -h, --help      show this help message and exit
->   --name TEXT
+>  -h, --help   show this help message and exit
+>  --name TEXT  (required)
 ```
+
+You may have noticed two things: if you are familiar with `argparse`, you probably already know that
+the `--help` argument is automatically added to every command. In addition, `argdantic` explicitly
+provides the `(required)` tag to every argument that does not specify a default value.
+This is done to ensure that the user is aware of some missing options, even before the command is executed.
