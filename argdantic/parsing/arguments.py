@@ -103,11 +103,12 @@ class PrimitiveArgument(Argument):
     """
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
+        cli_type = self.field_type if self.field_type in self.NAMES else str
         return super().build(
             parser,
             action=StoreAction,
-            type=self.field_type,
-            metavar=self.NAMES[self.field_type],
+            type=cli_type,
+            metavar=self.NAMES.get(cli_type, str),
         )
 
 
