@@ -72,6 +72,4 @@ def is_typing(field_type: type) -> bool:
     raw = types.get_origin(field_type)
     if raw is None:
         return False
-    if raw is type or raw is types.Type:
-        return True
-    return False
+    return raw is type or raw is types.Type

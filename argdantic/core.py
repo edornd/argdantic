@@ -92,11 +92,12 @@ class ArgParser:
         force_group: bool = False,
         delimiter: str = ".",
         internal_delimiter: str = "__",
+        subcommand_meta: str = "<command>",
     ) -> None:
         self.name: str = name
         self.entrypoint: ArgumentParser = None
-        self.description = description
-        self.force_group = force_group
+        self.description: str = description
+        self.force_group: bool = force_group
         self.commands: List[Command] = []
         self.groups: List[ParserType] = []
         # internal variables
@@ -105,6 +106,7 @@ class ArgParser:
         ), f"The internal delimiter {internal_delimiter} is not a valid identifier"
         self._delimiter = delimiter
         self._internal_delimiter = internal_delimiter
+        self._subcommand_meta = subcommand_meta
         # keeping a reference to subparser is necessary to add subparsers
         # Each cli level can only have one subparser.
         self._subparser: _SubParsersAction = None
@@ -129,7 +131,12 @@ class ArgParser:
         args = self.entrypoint.parse_args(args)
         return args.__func__(args)
 
-    def _get_subparser(self, parser: ArgumentParser, *, destination: str = "group") -> _SubParsersAction:
+    def _get_subparser(
+        self,
+        parser: ArgumentParser,
+        *,
+        destination: str = "group",
+    ) -> _SubParsersAction:
         """
         Get the subparser for the current parser. If it does not exist, create it.
 
@@ -140,7 +147,7 @@ class ArgParser:
             _SubParsersAction: subparser.
         """
         if self._subparser is None:
-            self._subparser = parser.add_subparsers(dest=destination, required=True)
+            self._subparser = parser.add_subparsers(dest=destination, required=True, metavar=self._subcommand_meta)
         return self._subparser
 
     def _build_entrypoint(self, parser: ArgumentParser = None, level: int = 0) -> ArgumentParser:
@@ -173,7 +180,10 @@ class ArgParser:
         for group in self.groups:
             sublevel = level + 1
             subparser = self._get_subparser(parser, destination=f"__group{sublevel}__")
-            group._build_entrypoint(parser=subparser.add_parser(group.name, help=group.description), level=sublevel)
+            group._build_entrypoint(
+                parser=subparser.add_parser(group.name, help=group.description),
+                level=sublevel,
+            )
         return parser
 
     def command(
