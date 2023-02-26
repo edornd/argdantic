@@ -456,3 +456,53 @@ def test_validation_error(runner: CLIRunner, capsys: CaptureFixture):
     LOG.debug(stripped)
     assert output.err.rstrip() == ""
     assert stripped == "verylongname 44"
+
+
+def test_singleton_multiple_arguments(runner: CLIRunner):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str
+        b: int
+
+    with pytest.raises(AssertionError):
+
+        @parser.command(singleton=True)
+        def empty(cfg: Config, seed: int):
+            print(cfg, seed)
+
+
+def test_singleton_without_model(runner: CLIRunner):
+    parser = ArgParser()
+
+    with pytest.raises(AssertionError):
+
+        @parser.command(singleton=True)
+        def empty(seed: int):
+            print(seed)
+
+
+def test_singleton_command(runner: CLIRunner, capsys: CaptureFixture):
+    parser = ArgParser()
+
+    class Config(BaseModel):
+        a: str = ArgField("--foo", "-f", description="A string", min_length=10)
+        b: int = ArgField("--bar", "-b", description="An integer", gt=43)
+
+    @parser.command(singleton=True)
+    def empty(cfg: Config):
+        print(f"{cfg.a} {cfg.b}")
+
+    runner.invoke(parser, ["--a=short", "--b=42"])
+    output = capsys.readouterr()
+    LOG.debug(output)
+    assert "a: ensure this value has at least 10 characters" in output.err.rstrip()
+    assert "b: ensure this value is greater than 43" in output.err.rstrip()
+    assert output.out.rstrip() == ""
+
+    runner.invoke(parser, ["--foo=verylongname", "--bar=44"])
+    output = capsys.readouterr()
+    stripped = output.out.rstrip()
+    LOG.debug(stripped)
+    assert output.err.rstrip() == ""
+    assert stripped == "verylongname 44"
