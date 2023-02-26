@@ -8,7 +8,6 @@ from argdantic.testing import CLIRunner
 
 
 def test_env_settings_source(runner: CLIRunner) -> None:
-
     source = EnvSettingsSource(env_file=".env", env_file_encoding="utf-8", env_prefix="ARGDANTIC_")
     assert "EnvSettingsSource" in repr(source)
     assert isinstance(source, EnvSettingsSource)
@@ -26,7 +25,6 @@ def test_env_settings_source(runner: CLIRunner) -> None:
 
 
 def test_secrets_setting_source(runner: CLIRunner, tmp_path: Path) -> None:
-
     source = SecretsSettingsSource(secrets_dir=tmp_path)
     assert "SecretsSettingsSource" in repr(source)
     assert isinstance(source, SecretsSettingsSource)
