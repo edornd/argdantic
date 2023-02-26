@@ -24,11 +24,13 @@ class Command:
         model_class: Type[BaseModel],
         name: str = None,
         description: str = None,
+        singleton: bool = False,
         delimiter: str = "__",
     ) -> None:
         assert callback is not None, "Callback must be a callable object"
         self.name = name
         self.description = description
+        self.singleton = singleton
         self.callback = callback
         self.model_class = model_class
         self.delimiter = delimiter
@@ -59,6 +61,8 @@ class Command:
             cli_trackers=self.trackers,
         )
         validated = self.model_class(**raw_data)
+        if self.singleton:
+            return self.callback(validated)
         destructured = {k: getattr(validated, k) for k in validated.__fields__.keys()}
         return self.callback(**destructured)
 
@@ -216,6 +220,7 @@ class ArgParser:
         name: Optional[str] = None,
         help: Optional[str] = None,
         sources: List[SettingsSourceCallable] = None,
+        singleton: bool = False,
     ) -> Callable:
         """Decorator to register a function as a command.
 
@@ -240,15 +245,30 @@ class ArgParser:
             # if we have a configuration parse it, otherwise handle empty commands
             # wrap everything into a wrapper model, so that multiple inputs can be provided
             arguments = None
+            model_class = None
             wrapped_fields = dict()
             if func_params:
-                for param_name, param in func_params:
-                    assert param.annotation is not inspect.Parameter.empty, f"Field '{name}' lacks annotations"
-                    default_value = param.default if param.default is not inspect.Parameter.empty else Ellipsis
-                    wrapped_fields[param_name] = (param.annotation, default_value)
+                # if the function expects a single argument, we do not wrap it
+                # otherwise, we prepare the fields for the wrapper model
+                if singleton:
+                    assert (
+                        len(func_params) == 1
+                    ), f"The command '{command_name}' expects a single argument, but {len(func_params)} were provided"
+                    param_name, param = func_params[0]
+                    assert lenient_issubclass(
+                        param.annotation, BaseModel
+                    ), f"The singleton argument '{param_name}' must be a pydantic model"
+                    model_class = param.annotation
+
+                else:
+                    for param_name, param in func_params:
+                        assert (
+                            param.annotation is not inspect.Parameter.empty
+                        ), f"Field '{param_name}' lacks type annotations"
+                        default_value = param.default if param.default is not inspect.Parameter.empty else Ellipsis
+                        wrapped_fields[param_name] = (param.annotation, default_value)
 
             # set the base Model and Config class
-            model_class = None
             if sources:
 
                 class SourceConfig(BaseSettings.Config):
@@ -271,15 +291,15 @@ class ArgParser:
                 for source in sources:
                     if hasattr(source, "inject"):
                         source.inject(SourceConfig)
+
                 BaseSettings.__config__ = SourceConfig
-                model_class = BaseSettings
+                model_class = BaseSettings if model_class is None else (model_class, BaseSettings)
 
             cfg_class = create_model(
                 "WrapperModel",
                 **wrapped_fields,
                 __base__=model_class,
             )
-            assert lenient_issubclass(cfg_class, BaseModel), "Configuration must be a pydantic model"
             arguments = model_to_args(cfg_class, self._delimiter, self._internal_delimiter)
 
             command = Command(
@@ -288,6 +308,7 @@ class ArgParser:
                 model_class=cfg_class,
                 name=command_name,
                 description=command_help,
+                singleton=singleton,
                 delimiter=self._internal_delimiter,
             )
             # add command to current CLI list and return it
