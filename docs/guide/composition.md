@@ -20,7 +20,7 @@ We can do this by defining two models, and then using the `Item` model as an arg
 
 Underneath, `argdantic` will automatically create the following structure:
 
-- A nameless root model, inheriting from `BaseConfig` if any extra feature is required, containing:
+- A nameless root model, inheriting from `BaseConfig` if any extra feature is enabled, and containing:
     * A field `item`, of type `Item`, which defines:
         * A field `name`, of type `str`,
         * A field `description`, of type `str`,
@@ -46,6 +46,12 @@ $ python nested_models.py --help
 >   --item.image.name TEXT          (required)
 ```
 
+!!! note
+
+        This argument wrapping behaviour is automated by default to make the command definition as natural as possible,
+        however it is possible to define a custom root model by using the `sigleton` keyword argument
+        of the `@command` decorator (See, [] )
+
 Executing the command with the required arguments will result in the following output:
 
 ```console
@@ -69,6 +75,39 @@ a hierarchy of models. In fact, you can define as many levels of nesting as you 
 that can be easily validated and parsed.
 Nested configurations are also supported using different input sources, such as environment variables and configuration files:
 see the [Input Sources](../sources) section for more details.
+
+### Singleton Configurations
+
+Sometimes it may be useful to define a single configuration object manually, and then use it as the main
+input argument of a command. For instance, imagine a machine learning pipeline with a single `config` object,
+that can be customized from command line, passed to each step of the pipeline, and then dumped to a file for future reference.
+
+This can be done by defining a custom model, and then by simply activating the `singleton` keyword argument of the `@command` decorator:
+
+```python  title="singleton_config.py" linenums="1" hl_lines="19"
+{!examples/composition/singleton.py!}
+```
+
+Argdantic will then use the defined argument as the root model, without wrapping it into a new one. This has the added
+benefit of removing the top-level name from the CLI fields, which would be all the same in this case.
+Note the absence of the `item` name in front of the following fields:
+
+```console
+$ python singleton.py --help
+> usage: test.py [-h] --name TEXT --description TEXT --image.name TEXT
+>
+> optional arguments:
+>   -h, --help          show this help message and exit
+>   --name TEXT         (required)
+>   --description TEXT  (required)
+>   --image.name TEXT   (required)
+```
+
+!!! warning
+
+    The `singleton` configuration setup only works when two requirements are met: first, **only one argument** must be
+    defined in the signature of the `@command` function, and second, **that argument must be a _pydantic_ model**.
+    Failure to meet these requirements will result in an `AssertionError` being raised.
 
 ## Nested Parsers
 
