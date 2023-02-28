@@ -1,12 +1,10 @@
-from typing import List
 from datetime import date
+from typing import List
+
 from pydantic import BaseModel
 
 from argdantic import ArgParser
 
-
-class Test(BaseModel):
-    test: List[date]
 
 class Image(BaseModel):
     name: str
@@ -16,7 +14,7 @@ class Item(BaseModel):
     name: str
     description: str
     image: Image = None
-    test: Test
+    dates: List[date]
 
 
 cli = ArgParser()

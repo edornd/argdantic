@@ -174,11 +174,11 @@ class MultipleArgument(Argument):
             # A composite type has a tuple of arguments, like 'Tuple[str, int, int]'.
             args = t.get_args(self.field_type)
             if len(args) == 1 or (len(args) == 2 and args[1] is Ellipsis):
-                inner_type = args[0]
-                metavar = self.NAMES[inner_type] if inner_type in self.NAMES else inner_type
+                inner_type = args[0] if args[0] in self.NAMES else str
+                metavar = self.NAMES.get(inner_type, inner_type)
             elif len(args) >= 2:
                 arg_count = len(args)
-                metavar = tuple([self.NAMES[arg] if arg in self.NAMES else arg for arg in args])
+                metavar = tuple([self.NAMES.get(arg, str) for arg in args])
         return inner_type, arg_count, metavar
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
