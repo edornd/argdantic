@@ -1,3 +1,6 @@
+from datetime import date
+from typing import List
+
 from pydantic import BaseModel
 
 from argdantic import ArgParser
@@ -11,6 +14,7 @@ class Item(BaseModel):
     name: str
     description: str
     image: Image = None
+    dates: List[date]
 
 
 cli = ArgParser()
