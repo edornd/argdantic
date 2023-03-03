@@ -28,7 +28,7 @@ this includes orjson, pyyaml, tomli, python-dotenv
 user@pc:~$ pip install argdantic[all]
 
 env, json, toml or yaml dependencies
-user@pc:~$ pip install[env|json|toml|yaml]
+user@pc:~$ pip install argdantic[env|json|toml|yaml]
 
 minimum requirement, only pydantic included
 user@pc:~$ pip install argdantic
