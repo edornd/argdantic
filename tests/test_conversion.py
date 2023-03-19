@@ -117,6 +117,7 @@ def test_sequences(runner: CLIRunner, capsys: CaptureFixture):
 
 def test_mappings(runner: CLIRunner, capsys: CaptureFixture):
     parser = ArgParser()
+    runner = CLIRunner(catch_exceptions=False)
 
     @parser.command()
     def mappings(
@@ -128,6 +129,7 @@ def test_mappings(runner: CLIRunner, capsys: CaptureFixture):
 
     runner.invoke(parser, [])
     output = capsys.readouterr()
+    LOG.debug(output)
     assert output.out.rstrip() == "{} {'a': 1.0, 'b': 2.0} {'a': [{1, 2}, {3, 4}]}"
 
 
