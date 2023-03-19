@@ -1,7 +1,6 @@
 from argdantic.parsing.arguments import (
     ActionTracker,
     Argument,
-    BytesArgument,
     ChoiceArgument,
     DictArgument,
     FlagArgument,
@@ -14,7 +13,6 @@ from argdantic.parsing.arguments import (
 __all__ = [
     "ActionTracker",
     "Argument",
-    "BytesArgument",
     "ChoiceArgument",
     "DictArgument",
     "FlagArgument",

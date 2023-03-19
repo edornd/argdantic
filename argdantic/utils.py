@@ -3,6 +3,22 @@ import typing as types
 from pydantic.utils import lenient_issubclass
 
 
+def type_name(field_type: type) -> str:
+    """Returns the name of the type, or the name of the type's origin, if the type is a
+    typing construct.
+    Args:
+        field_type (type): pydantic field type
+    Returns:
+        str: name of the type
+    """
+    origin = types.get_origin(field_type)
+    if origin is not None:
+        name = origin.__name__
+    else:
+        name = field_type.__name__
+    return name.lower()
+
+
 def is_multiple(field_type: type) -> bool:
     """Checks whether the current type is a container type ('contains' other types), like
     lists and tuples.

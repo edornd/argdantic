@@ -13,9 +13,26 @@ from argdantic.parsing.actions import (
     StoreTrueAction,
 )
 from argdantic.registry import Registry
-from argdantic.utils import is_container
+from argdantic.utils import is_container, type_name
 
 registry = Registry()
+
+cli_types = {
+    "bool": (bool, "BOOL"),
+    "int": (int, "INT"),
+    "float": (float, "FLOAT"),
+    "complex": (complex, "COMPLEX"),
+    "bytes": (str.encode, "BYTES"),
+    "str": (str, "TEXT"),
+    "dict": (dict, "JSON"),
+    "datetime": (str, "DATETIME"),
+    "date": (str, "DATE"),
+    "time": (str, "TIME"),
+    "timedelta": (str, "TIMEDELTA"),
+    "path": (str, "PATH"),
+    "email": (str, "EMAIL"),
+}
+cli_default = (str, "TEXT")
 
 
 class ActionTracker:
@@ -56,16 +73,6 @@ class Argument(ABC):
     subclassed to create new argument types.
     """
 
-    NAMES = {
-        bool: "BOOL",
-        int: "INT",
-        float: "FLOAT",
-        complex: "COMPLEX",
-        bytes: "BYTES",
-        str: "TEXT",
-        dict: "JSON",
-    }
-
     def __init__(
         self,
         *field_names: t.Sequence[str],
@@ -103,25 +110,12 @@ class PrimitiveArgument(Argument):
     """
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
-        cli_type = self.field_type if self.field_type in self.NAMES else str
+        cli_type, cli_metavar = cli_types.get(type_name(self.field_type), cli_default)
         return super().build(
             parser,
             action=StoreAction,
             type=cli_type,
-            metavar=self.NAMES.get(cli_type, str),
-        )
-
-
-@registry.register(bytes)
-class BytesArgument(Argument):
-    """Argument for bytes type"""
-
-    def build(self, parser: ArgumentParser) -> ArgumentParser:
-        return super().build(
-            parser,
-            action=StoreAction,
-            type=str.encode,
-            metavar=self.NAMES[self.field_type],
+            metavar=cli_metavar,
         )
 
 
@@ -168,17 +162,16 @@ class MultipleArgument(Argument):
     def _type_and_count(self) -> bool:
         inner_type = str
         arg_count = "+" if self.required else "*"
-        metavar = self.NAMES[inner_type]
+        metavar = cli_types[type_name(inner_type)]
         if is_container(self.field_type):
             # A non-composite type has a single argument, such as 'List[int]'
             # A composite type has a tuple of arguments, like 'Tuple[str, int, int]'.
             args = t.get_args(self.field_type)
             if len(args) == 1 or (len(args) == 2 and args[1] is Ellipsis):
-                inner_type = args[0] if args[0] in self.NAMES else str
-                metavar = self.NAMES.get(inner_type, inner_type)
+                inner_type, metavar = cli_types.get(type_name(args[0]), cli_default)
             elif len(args) >= 2:
                 arg_count = len(args)
-                metavar = tuple([self.NAMES.get(arg, str) for arg in args])
+                metavar = tuple([cli_types.get(type_name(arg), cli_default)[1] for arg in args])
         return inner_type, arg_count, metavar
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
@@ -257,9 +250,10 @@ class DictArgument(Argument):
     """
 
     def build(self, parser: ArgumentParser) -> ArgumentParser:
+        _, metavar = cli_types[type_name(dict)]
         return super().build(
             parser,
             action=StoreAction,
             type=json.loads,
-            metavar=self.NAMES[dict],
+            metavar=metavar,
         )

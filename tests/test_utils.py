@@ -1,9 +1,33 @@
 import logging
 import typing as types
 
-from argdantic.utils import is_container, is_mapping, is_multiple, is_typing
+from argdantic.utils import is_container, is_mapping, is_multiple, is_typing, type_name
 
 LOG = logging.getLogger(__name__)
+
+
+def test_type_names():
+    assert type_name(int) == "int"
+    assert type_name(str) == "str"
+    assert type_name(float) == "float"
+    assert type_name(bool) == "bool"
+    assert type_name(bytes) == "bytes"
+    assert type_name(list) == "list"
+    assert type_name(tuple) == "tuple"
+    assert type_name(dict) == "dict"
+    assert type_name(set) == "set"
+    assert type_name(frozenset) == "frozenset"
+    assert type_name(types.Mapping) == "mapping"
+    assert type_name(types.Sequence) == "sequence"
+    assert type_name(types.Iterable) == "iterable"
+    assert type_name(types.Container) == "container"
+    assert type_name(types.List) == "list"
+    assert type_name(types.Tuple) == "tuple"
+    assert type_name(types.Set) == "set"
+    assert type_name(types.FrozenSet) == "frozenset"
+    assert type_name(types.Dict) == "dict"
+    assert type_name(types.Deque) == "deque"
+    assert type_name(types.DefaultDict) == "defaultdict"
 
 
 def test_registry_set():
