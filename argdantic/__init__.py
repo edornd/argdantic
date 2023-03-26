@@ -3,7 +3,7 @@
 from argdantic.core import ArgParser
 from argdantic.fields import ArgField
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = [
     "ArgParser",
     "ArgField",
