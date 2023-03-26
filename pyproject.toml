@@ -78,6 +78,9 @@ src_paths = ["argdantic", "tests"]
 ignore = ["E741"]
 max-line-length = 120
 
+[tool.ruff]
+line-length = 120
+
 [tool.pytest.ini_options]
 addopts = "-ra --capture=sys"
 log_cli = true
