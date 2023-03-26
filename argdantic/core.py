@@ -8,6 +8,7 @@ from pydantic.utils import lenient_issubclass
 
 from argdantic.convert import args_to_dict_tree, model_to_args
 from argdantic.parsing import Argument
+from argdantic.stores import SettingsStoreCallable
 
 
 class Command:
@@ -25,6 +26,7 @@ class Command:
         name: str = None,
         description: str = None,
         singleton: bool = False,
+        stores: List[SettingsStoreCallable] = None,
         delimiter: str = "__",
     ) -> None:
         assert callback is not None, "Callback must be a callable object"
@@ -35,6 +37,7 @@ class Command:
         self.model_class = model_class
         self.delimiter = delimiter
         self.arguments = arguments or []
+        self.stores = stores or []
         self.trackers = {}
 
     def __repr__(self) -> str:
@@ -53,6 +56,7 @@ class Command:
         Returns:
             Any: return value of the callback.
         """
+        # transform the arguments into a dictionary tree for validation
         kwargs = vars(args)
         raw_data = args_to_dict_tree(
             kwargs,
@@ -60,7 +64,13 @@ class Command:
             remove_helpers=True,
             cli_trackers=self.trackers,
         )
+        # validate the arguments against the pydantic model
         validated = self.model_class(**raw_data)
+        # store the validated arguments in the settings stores
+        for store in self.stores:
+            store(validated)
+        # invoke the callback with the validated arguments
+        # if the command is a singleton, pass the model as a single argument
         if self.singleton:
             return self.callback(validated)
         destructured = {k: getattr(validated, k) for k in validated.__fields__.keys()}
@@ -220,6 +230,7 @@ class ArgParser:
         name: Optional[str] = None,
         help: Optional[str] = None,
         sources: List[SettingsSourceCallable] = None,
+        stores: List[SettingsStoreCallable] = None,
         singleton: bool = False,
     ) -> Callable:
         """Decorator to register a function as a command.
@@ -234,6 +245,7 @@ class ArgParser:
             Callable: The same function, promoted to a command.
         """
         assert sources is None or isinstance(sources, list), "Sources must be a list of callables"
+        assert stores is None or isinstance(stores, list), "Stores must be a list of callables"
 
         def decorator(f: Callable) -> Command:
             # create a name or use the provided one
@@ -309,6 +321,7 @@ class ArgParser:
                 name=command_name,
                 description=command_help,
                 singleton=singleton,
+                stores=stores,
                 delimiter=self._internal_delimiter,
             )
             # add command to current CLI list and return it
