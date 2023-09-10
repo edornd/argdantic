@@ -3,7 +3,7 @@ build-backend = "flit_core.buildapi"
 requires = ["flit_core >=3.2,<4"]
 
 [project]
-authors = [{name = "Edoardo Arnaudo", email = "edoardo.arn@gmail.com"}]
+authors = [{ name = "Edoardo Arnaudo", email = "edoardo.arn@gmail.com" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Topic :: Software Development",
@@ -19,10 +19,10 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-  "pydantic >= 1.10.0",
+  "pydantic >= 1.10.0, < 2"
 ]
 dynamic = ["version", "description"]
-license = {file = "LICENSE"}
+license = { file = "LICENSE" }
 name = "argdantic"
 readme = "README.md"
 
@@ -47,10 +47,10 @@ docs = [
   "mdx-include >= 1.4.0, < 2.0",
 ]
 env = [
-  "python-dotenv >= 0.19.0, < 1.0",
+  "python-dotenv >= 0.19.0, < 1.0"
 ]
 json = [
-  "orjson >= 3.6.4, < 4.0",
+  "orjson >= 3.6.4, < 4.0"
 ]
 test = [
   "coverage >= 6.1.2, < 7.0",
@@ -61,9 +61,10 @@ test = [
 ]
 toml = [
   "tomli >= 2.0, < 3.0",
+  "tomli-w >= 1.0.0, < 2.0",
 ]
 yaml = [
-  "pyyaml >= 6.0.0, < 7.0",
+  "pyyaml >= 6.0.0, < 7.0"
 ]
 
 [tool.black]
