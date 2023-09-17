@@ -3,8 +3,9 @@ from argparse import ArgumentParser, Namespace, _SubParsersAction
 from typing import Any, Callable, List, Optional, Sequence, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError, create_model
-from pydantic.env_settings import BaseSettings, SettingsSourceCallable
-from pydantic.utils import lenient_issubclass
+from pydantic.v1.utils import lenient_issubclass
+from pydantic_settings import BaseSettings
+from pydantic_settings.sources import PydanticBaseSettingsSource
 
 from argdantic.convert import args_to_dict_tree, model_to_args
 from argdantic.parsing import Argument
@@ -73,7 +74,7 @@ class Command:
         # if the command is a singleton, pass the model as a single argument
         if self.singleton:
             return self.callback(validated)
-        destructured = {k: getattr(validated, k) for k in validated.__fields__.keys()}
+        destructured = {k: getattr(validated, k) for k in validated.model_fields.keys()}
         return self.callback(**destructured)
 
     def build(self, parser: ArgumentParser) -> None:
@@ -229,7 +230,7 @@ class ArgParser:
         self,
         name: Optional[str] = None,
         help: Optional[str] = None,
-        sources: List[SettingsSourceCallable] = None,
+        sources: List[PydanticBaseSettingsSource] = None,
         stores: List[SettingsStoreCallable] = None,
         singleton: bool = False,
     ) -> Callable:
@@ -283,29 +284,27 @@ class ArgParser:
             # set the base Model and Config class
             if sources:
 
-                class SourceConfig(BaseSettings.Config):
+                class SourceSettings(BaseSettings):
                     # patch the config class so that pydantic functionality remains
                     # the same, but the sources are properly initialized
 
                     @classmethod
-                    def customise_sources(
-                        self,
-                        init_settings: SettingsSourceCallable,
-                        env_settings: SettingsSourceCallable,
-                        file_secret_settings: SettingsSourceCallable,
+                    def settings_customise_sources(
+                        cls,
+                        settings_cls: type[BaseSettings],
+                        init_settings: PydanticBaseSettingsSource,
+                        env_settings: PydanticBaseSettingsSource,
+                        dotenv_settings: PydanticBaseSettingsSource,
+                        file_secret_settings: PydanticBaseSettingsSource,
                     ):
                         # cheeky way to harmonize the sources inside the config class:
                         # this is needed to make sure that the config class is properly
                         # initialized with the sources declared by the user on CLI init.
                         # Env and file sources are discarded, the user must provide them explicitly.
-                        return (init_settings, *sources)
+                        callables = [source(settings_cls) for source in sources]
+                        return (init_settings, *callables)
 
-                for source in sources:
-                    if hasattr(source, "inject"):
-                        source.inject(SourceConfig)
-
-                BaseSettings.__config__ = SourceConfig
-                model_class = BaseSettings if model_class is None else (model_class, BaseSettings)
+                model_class = SourceSettings if model_class is None else (model_class, SourceSettings)
 
             cfg_class = create_model(
                 "WrapperModel",

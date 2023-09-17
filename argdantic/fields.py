@@ -24,9 +24,6 @@ def ArgField(
     Returns:
         A FieldInfo object with the given arguments.
     """
-    extra.update(names=names)
-    return Field(
-        default,
-        description=description,
-        **extra,
-    )
+    json_schema_extra = extra.pop("json_schema_extra", {})
+    json_schema_extra["names"] = names
+    return Field(default, description=description, json_schema_extra=json_schema_extra, **extra)

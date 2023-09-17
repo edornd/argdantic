@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 from argdantic.stores.base import BaseSettingsStore
 
@@ -11,13 +11,12 @@ class JsonSettingsStore(BaseSettingsStore):
 
     def __call__(self, settings: BaseSettings) -> None:
         with self.path.open("wb") as f:
-            text = settings.json(
+            text = settings.model_dump_json(
                 include=self.include,
                 exclude=self.exclude,
                 by_alias=self.by_alias,
-                skip_defaults=self.skip_defaults,
-                exclude_unset=self.exclude_unset,
                 exclude_defaults=self.exclude_defaults,
+                exclude_unset=self.exclude_unset,
                 exclude_none=self.exclude_none,
             )
             f.write(text.encode(self.encoding))

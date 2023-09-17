@@ -1,6 +1,6 @@
 import typing as types
 
-from pydantic.utils import lenient_issubclass
+from pydantic.v1.utils import lenient_issubclass
 
 
 def type_name(field_type: type) -> str:
