@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 from argdantic.stores import JsonSettingsStore
 from argdantic.testing import CLIRunner
@@ -25,7 +25,7 @@ def test_json_store_call(tmp_path: Path) -> None:
         bar: int = 42
 
     store(Settings())
-    assert path.read_text() == '{"foo": "baz", "bar": 42}'
+    assert "".join(path.read_text().split(" ")) == '{"foo":"baz","bar":42}'
 
     class Settings(BaseSettings):
         foo: str = "baz"
@@ -33,7 +33,7 @@ def test_json_store_call(tmp_path: Path) -> None:
         baz: List[str] = ["foo", "bar"]
 
     store(Settings())
-    assert path.read_text() == '{"foo": "baz", "bar": 42, "baz": ["foo", "bar"]}'
+    assert "".join(path.read_text().split(" ")) == '{"foo":"baz","bar":42,"baz":["foo","bar"]}'
 
     class Settings(BaseSettings):
         foo: str = "baz"

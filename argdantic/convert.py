@@ -2,8 +2,10 @@ import argparse
 from argparse import ArgumentParser
 from typing import Any, Dict, Tuple, Type
 
-from pydantic import BaseModel, Field
-from pydantic.utils import lenient_issubclass
+from pydantic import BaseModel
+from pydantic.fields import FieldInfo
+from pydantic.v1.utils import lenient_issubclass
+from pydantic_core import PydanticUndefined
 
 from argdantic.parsing import ActionTracker, PrimitiveArgument, registry
 
@@ -37,7 +39,7 @@ def format_description(description: str, has_default: bool, is_required: bool) -
 
 
 def argument_from_field(
-    field: Field,
+    field_info: FieldInfo,
     kebab_name: str,
     delimiter: str,
     internal_delimiter: str,
@@ -56,18 +58,19 @@ def argument_from_field(
         Argument: The argument.
     """
     # this function should only deal with non-pydantic objects
-    assert not lenient_issubclass(field.outer_type_, BaseModel)
+    assert not lenient_issubclass(field_info.annotation, BaseModel)
     base_option_name = delimiter.join(parent_path + (kebab_name,))
     full_option_name = f"--{base_option_name}"
-    extra_names = field.field_info.extra.get("names", ())
+    extra_fields = field_info.json_schema_extra or {}
+    extra_names = extra_fields.get("names", ())
 
     # example.test-attribute -> example__test_attribute
     identifier = base_option_name.replace(delimiter, internal_delimiter).replace("-", "_")
-    field_type = field.outer_type_
+    field_type = field_info.annotation
     field_names = (full_option_name, *extra_names)
-    has_default = field.default is not None
-    field_default = field.default if has_default else argparse.SUPPRESS
-    description = format_description(field.field_info.description, has_default, field.required)
+    has_default = field_info.default is not PydanticUndefined and field_info.default is not None
+    field_default = field_info.default if has_default else argparse.SUPPRESS
+    description = format_description(field_info.description, has_default, field_info.is_required())
 
     arg_class = registry.get(field_type, PrimitiveArgument)
     return arg_class(
@@ -75,7 +78,7 @@ def argument_from_field(
         identifier=identifier,
         field_type=field_type,
         default=field_default,
-        required=field.required,
+        required=field_info.is_required(),
         description=description,
     )
 
@@ -98,13 +101,13 @@ def model_to_args(
         ArgumentParser: The argument parser.
     """
     # iterate over fields in the settings
-    for field in model.__fields__.values():
+    for field_name, field_info in model.model_fields.items():
         # checks on delimiters to be done
-        kebab_name = field.name.replace("_", "-")
+        kebab_name = field_name.replace("_", "-")
         assert internal_delimiter not in kebab_name
-        if lenient_issubclass(field.outer_type_, BaseModel):
+        if lenient_issubclass(field_info.annotation, BaseModel):
             yield from model_to_args(
-                field.outer_type_,
+                field_info.annotation,
                 delimiter,
                 internal_delimiter,
                 parent_path=parent_path + (kebab_name,),
@@ -112,7 +115,7 @@ def model_to_args(
             continue
         # simple fields
         yield argument_from_field(
-            field=field,
+            field_info=field_info,
             kebab_name=kebab_name,
             delimiter=delimiter,
             internal_delimiter=internal_delimiter,

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import mock
 import pytest
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 from argdantic.testing import CLIRunner
 

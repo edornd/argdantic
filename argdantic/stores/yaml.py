@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 from argdantic.stores.base import BaseSettingsStore
 
@@ -20,13 +20,13 @@ class YamlSettingsStore(BaseSettingsStore):
             )
 
         with self.path.open("w") as f:
-            data = settings.dict(
+            data = settings.model_dump(
                 include=self.include,
                 exclude=self.exclude,
                 by_alias=self.by_alias,
-                skip_defaults=self.skip_defaults,
-                exclude_unset=self.exclude_unset,
                 exclude_defaults=self.exclude_defaults,
+                exclude_unset=self.exclude_unset,
+                exclude_none=self.exclude_none,
             )
             yaml.safe_dump(data, f, encoding="utf-8", allow_unicode=True)
 

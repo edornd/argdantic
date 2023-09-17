@@ -446,8 +446,8 @@ def test_validation_error(runner: CLIRunner, capsys: CaptureFixture):
     runner.invoke(parser, ["--cfg.a=short", "--cfg.b=42"])
     output = capsys.readouterr()
     LOG.debug(output)
-    assert "cfg -> a: ensure this value has at least 10 characters" in output.err.rstrip()
-    assert "cfg -> b: ensure this value is greater than 43" in output.err.rstrip()
+    assert "cfg -> a: String should have at least 10 characters" in output.err.rstrip()
+    assert "cfg -> b: Input should be greater than 43" in output.err.rstrip()
     assert output.out.rstrip() == ""
 
     runner.invoke(parser, ["--foo=verylongname", "--bar=44"])
@@ -496,8 +496,8 @@ def test_singleton_command(runner: CLIRunner, capsys: CaptureFixture):
     runner.invoke(parser, ["--a=short", "--b=42"])
     output = capsys.readouterr()
     LOG.debug(output)
-    assert "a: ensure this value has at least 10 characters" in output.err.rstrip()
-    assert "b: ensure this value is greater than 43" in output.err.rstrip()
+    assert "a: String should have at least 10 characters" in output.err.rstrip()
+    assert "b: Input should be greater than 43" in output.err.rstrip()
     assert output.out.rstrip() == ""
 
     runner.invoke(parser, ["--foo=verylongname", "--bar=44"])

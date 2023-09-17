@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 import mock
 import pytest
+from pydantic_settings import BaseSettings
 
 from argdantic.sources.base import FileSettingsSource
 from argdantic.testing import CLIRunner
@@ -15,26 +16,32 @@ def create_toml_file(data: Dict[str, Any], path: Path) -> Path:
     return path
 
 
+class TestConfig(BaseSettings):
+    __test__ = False
+    foo: str
+    bar: int
+
+
 def test_toml_import_error(tmp_path: Path) -> None:
     from argdantic.sources.toml import TomlSettingsSource
 
-    path = create_toml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.toml")
     with mock.patch.dict("sys.modules", {"tomli": None}):
-        source = TomlSettingsSource(path)
-        assert repr(source) == f"<TomlSettingsSource path={path}>"
-        assert isinstance(source, FileSettingsSource)
+        path = create_toml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.toml")
+        source_spawner = TomlSettingsSource(path)
+        assert repr(source_spawner) == f"<TomlSettingsSource path={path}>"
+        assert isinstance(source_spawner, FileSettingsSource)
         with pytest.raises(ImportError):
-            source()
+            source_spawner(TestConfig)()
 
 
 def test_toml_source(tmp_path: Path) -> None:
     from argdantic.sources.toml import TomlSettingsSource
 
     path = create_toml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.toml")
-    source = TomlSettingsSource(path)
-    assert repr(source) == f"<TomlSettingsSource path={path}>"
-    assert isinstance(source, FileSettingsSource)
-    assert source() == {"foo": "baz", "bar": 42}
+    source_spawner = TomlSettingsSource(path)
+    assert repr(source_spawner) == f"<TomlSettingsSource path={path}>"
+    assert isinstance(source_spawner, FileSettingsSource)
+    assert source_spawner(TestConfig)() == {"foo": "baz", "bar": 42}
 
 
 def test_parser_using_toml_source(tmp_path: Path, runner: CLIRunner) -> None:

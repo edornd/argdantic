@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 import mock
 import pytest
+from pydantic_settings import BaseSettings
 
 from argdantic.sources.base import FileSettingsSource
 from argdantic.testing import CLIRunner
@@ -15,16 +16,22 @@ def create_yaml_file(data: Dict[str, Any], path: Path) -> Path:
     return path
 
 
+class TestConfig(BaseSettings):
+    __test__ = False
+    foo: str
+    bar: int
+
+
 def test_yaml_import_error(tmp_path: Path) -> None:
     from argdantic.sources.yaml import YamlSettingsSource
 
     path = create_yaml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.yaml")
     with mock.patch.dict("sys.modules", {"yaml": None}):
-        source = YamlSettingsSource(path)
-        assert repr(source) == f"<YamlSettingsSource path={path}>"
-        assert isinstance(source, FileSettingsSource)
+        source_spawner = YamlSettingsSource(path)
+        assert repr(source_spawner) == f"<YamlSettingsSource path={path}>"
+        assert isinstance(source_spawner, FileSettingsSource)
         with pytest.raises(ImportError):
-            source()
+            source_spawner(TestConfig)()
 
 
 def test_yaml_source(tmp_path: Path) -> None:
@@ -34,7 +41,7 @@ def test_yaml_source(tmp_path: Path) -> None:
     source = YamlSettingsSource(path)
     assert repr(source) == f"<YamlSettingsSource path={path}>"
     assert isinstance(source, FileSettingsSource)
-    assert source() == {"foo": "baz", "bar": 42}
+    assert source(TestConfig)() == {"foo": "baz", "bar": 42}
 
 
 def test_parser_using_yaml_source(tmp_path: Path, runner: CLIRunner) -> None:

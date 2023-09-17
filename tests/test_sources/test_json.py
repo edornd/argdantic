@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import mock
+from pydantic_settings import BaseSettings
 
 from argdantic.sources.base import FileSettingsSource
 from argdantic.testing import CLIRunner
@@ -13,25 +14,31 @@ def create_json_file(data: Dict[str, Any], path: Path) -> Path:
     return path
 
 
+class TestConfig(BaseSettings):
+    __test__ = False
+    foo: str
+    bar: int
+
+
 def test_json_no_import_error(tmp_path: Path) -> None:
     from argdantic.sources.json import JsonSettingsSource
 
     with mock.patch.dict("sys.modules", {"orjson": None}):
         path = create_json_file({"foo": "baz", "bar": 42}, tmp_path / "settings.json")
-        source = JsonSettingsSource(path)
-        assert isinstance(source, FileSettingsSource)
-        assert source() == {"foo": "baz", "bar": 42}
-        assert repr(source) == f"<JsonSettingsSource path={path}>"
+        source_spawner = JsonSettingsSource(path)
+        assert isinstance(source_spawner, FileSettingsSource)
+        assert source_spawner(TestConfig)() == {"foo": "baz", "bar": 42}
+        assert repr(source_spawner) == f"<JsonSettingsSource path={path}>"
 
 
 def test_json_source(tmp_path: Path) -> None:
     from argdantic.sources.json import JsonSettingsSource
 
     path = create_json_file({"foo": "baz", "bar": 42}, tmp_path / "settings.json")
-    source = JsonSettingsSource(path)
-    assert isinstance(source, FileSettingsSource)
-    assert source() == {"foo": "baz", "bar": 42}
-    assert repr(source) == f"<JsonSettingsSource path={path}>"
+    source_spawner = JsonSettingsSource(path)
+    assert isinstance(source_spawner, FileSettingsSource)
+    assert source_spawner(TestConfig)() == {"foo": "baz", "bar": 42}
+    assert repr(source_spawner) == f"<JsonSettingsSource path={path}>"
 
 
 def test_parser_using_json_source(tmp_path: Path, runner: CLIRunner) -> None:
