@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
   "pydantic >= 2.3.0, < 3.0",
-  "pydantic-settings >= 2.0.0, > 3"
+  "pydantic-settings >= 2.0.0, < 3"
 ]
 dynamic = ["version", "description"]
 license = { file = "LICENSE" }
