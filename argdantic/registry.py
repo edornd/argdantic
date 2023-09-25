@@ -9,7 +9,9 @@ class Registry(MutableMapping):
         self.store = dict()
 
     def __getitem__(self, key: type) -> types.Any:
-        assert types.get_origin(key) is not types.Union, "Unions are not supported"
+        # do not allow Union types (unless they are Optional, handled in conversion)
+        if types.get_origin(key) is types.Union:
+            raise ValueError("Union types are not supported, please specify a single type.")
         try:
             hierarchy = key.mro()[:-1]
         # avoid look-up errors for non-classes (Literals, etc.)

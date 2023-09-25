@@ -24,7 +24,7 @@ def is_multiple(field_type: type) -> bool:
     lists and tuples.
     Args:
         field_type (type): pydantic field type
-    Returns:
+    # Returns:
         bool: true if a container, false otherwise
     """
     # do not consider strings or byte arrays as containers
@@ -89,3 +89,13 @@ def is_typing(field_type: type) -> bool:
     if raw is None:
         return False
     return raw is type or raw is types.Type
+
+
+def is_optional(field_type: type) -> bool:
+    """Checks whether the current type is an optional type.
+    Args:
+        field_type (type): pydantic field type
+    Returns:
+        bool: true if the type is optional, false otherwise
+    """
+    return types.get_origin(field_type) is types.Union and type(None) in types.get_args(field_type)

@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Type, Union
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from pydantic_settings.sources import DotEnvSettingsSource as PydanticEnvSource
@@ -16,7 +16,7 @@ class ArgdanticSource(ABC):
     """
 
     @abstractmethod
-    def __call__(self, settings_cls: type[BaseSettings]) -> PydanticBaseSettingsSource:
+    def __call__(self, settings_cls: Type[BaseSettings]) -> PydanticBaseSettingsSource:
         raise NotImplementedError  # pragma: no cover
 
 
@@ -27,7 +27,7 @@ class FileSettingsSource(ABC):
     passed to a pydantic model.
     """
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: Union[str, Path]) -> None:
         self.path = Path(path)
 
     @abstractmethod
@@ -41,7 +41,7 @@ class PydanticMultiEnvSource(PydanticEnvSource):
     This loads from both the environment variables and the dotenv file.
     """
 
-    def _load_env_vars(self) -> Mapping[str, str | None]:
+    def _load_env_vars(self) -> Mapping[str, Union[str, None]]:
         if self.case_sensitive:
             env_vars = os.environ
         else:
@@ -79,7 +79,7 @@ class EnvSettingsSource(ArgdanticSource):
         self.env_prefix = env_prefix
         self.env_case_sensitive = env_case_sensitive
 
-    def __call__(self, settings_cls: type[BaseSettings]) -> PydanticBaseSettingsSource:
+    def __call__(self, settings_cls: Type[BaseSettings]) -> PydanticBaseSettingsSource:
         return PydanticMultiEnvSource(
             settings_cls=settings_cls,
             env_file=self.env_file,
@@ -95,12 +95,12 @@ class SecretsSettingsSource(ArgdanticSource):
     This class inherits from the pydantic SecretsSettingsSource class to fully customize input sources.
     """
 
-    def __init__(self, secrets_dir: Optional[str | Path], case_sensitive: bool = False, env_prefix: str = ""):
+    def __init__(self, secrets_dir: Optional[Union[str, Path]], case_sensitive: bool = False, env_prefix: str = ""):
         self.secrets_dir = secrets_dir
         self.case_sensitive = case_sensitive
         self.env_prefix = env_prefix
 
-    def __call__(self, settings_cls: type[BaseSettings]) -> PydanticBaseSettingsSource:
+    def __call__(self, settings_cls: Type[BaseSettings]) -> PydanticBaseSettingsSource:
         return PydanticSecretsSource(
             settings_cls=settings_cls,
             secrets_dir=self.secrets_dir,

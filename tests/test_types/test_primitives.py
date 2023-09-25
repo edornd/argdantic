@@ -1,5 +1,7 @@
 import logging
+from typing import Union
 
+import pytest
 from pytest import CaptureFixture
 
 from argdantic import ArgParser
@@ -234,3 +236,15 @@ def test_bytes_types_help(runner: CLIRunner, capsys: CaptureFixture):
     assert output.err.rstrip() == ""
     assert "usage:" in output.out.rstrip()
     assert "[-h] [--a BYTES] [--b BYTES]" in output.out.rstrip()
+
+
+def test_value_error_on_union(capsys: CaptureFixture):
+    parser = ArgParser()
+    runner = CLIRunner(catch_exceptions=False)
+
+    @parser.command()
+    def value_error_on_union(a: Union[int, str]):
+        print(a)
+
+    with pytest.raises(ValueError):
+        runner.invoke(parser, ["--a", "aa"])
