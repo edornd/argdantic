@@ -1,4 +1,6 @@
+import platform
 from pathlib import Path
+from typing import Optional, Union
 
 import mock
 
@@ -36,7 +38,7 @@ def test_env_settings_source_case_sensitive(runner: CLIRunner) -> None:
     parser = ArgParser()
 
     @parser.command(sources=[source_spawner])
-    def main(foo: str | None = None, bar: int | None = None) -> None:
+    def main(foo: Optional[str] = None, bar: Optional[int] = None) -> None:
         return foo, bar
 
     with mock.patch.dict("os.environ", {"foo": "baz", "bar": "42"}):
@@ -47,7 +49,11 @@ def test_env_settings_source_case_sensitive(runner: CLIRunner) -> None:
     with mock.patch.dict("os.environ", {"FOO": "baz", "bar": "42"}):
         result = runner.invoke(parser, [])
         assert result.exception is None
-        assert result.return_value == (None, 42)
+        if platform.system() == "Windows":
+            # windows is not case sensitive
+            assert result.return_value == ("baz", 42)
+        else:
+            assert result.return_value == (None, 42)
 
 
 def test_secrets_setting_source(runner: CLIRunner, tmp_path: Path) -> None:
@@ -58,7 +64,7 @@ def test_secrets_setting_source(runner: CLIRunner, tmp_path: Path) -> None:
     parser = ArgParser()
 
     @parser.command(sources=[source])
-    def main(foo: str | None = None, bar: int | None = None) -> None:
+    def main(foo: Union[str, None] = None, bar: Union[str, None] = None) -> None:
         return foo, bar
 
     # just check that it still runs properly

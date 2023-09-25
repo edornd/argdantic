@@ -1,6 +1,6 @@
 import argparse
 from argparse import ArgumentParser
-from typing import Any, Dict, Tuple, Type
+from typing import Any, Dict, Tuple, Type, get_args
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
@@ -8,6 +8,7 @@ from pydantic.v1.utils import lenient_issubclass
 from pydantic_core import PydanticUndefined
 
 from argdantic.parsing import ActionTracker, PrimitiveArgument, registry
+from argdantic.utils import is_optional
 
 
 def format_description(description: str, has_default: bool, is_required: bool) -> str:
@@ -66,7 +67,11 @@ def argument_from_field(
 
     # example.test-attribute -> example__test_attribute
     identifier = base_option_name.replace(delimiter, internal_delimiter).replace("-", "_")
+    # handle optional types, the only case where we currently support Unions
     field_type = field_info.annotation
+    if is_optional(field_info.annotation):
+        field_type = get_args(field_info.annotation)[0]
+
     field_names = (full_option_name, *extra_names)
     has_default = field_info.default is not PydanticUndefined and field_info.default is not None
     field_default = field_info.default if has_default else argparse.SUPPRESS

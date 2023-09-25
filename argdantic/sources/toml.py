@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Tuple, Type, Union
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
@@ -12,15 +12,15 @@ class PydanticTomlSource(PydanticBaseSettingsSource):
     This gets spawned by the TomlSettingsSource class.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], path: str | Path):
+    def __init__(self, settings_cls: Type[BaseSettings], path: Union[str, Path]):
         super().__init__(settings_cls)
         self.path = Path(path)
 
-    def get_field_value(self, *args) -> tuple[Any, str, bool]:
+    def get_field_value(self, *args) -> Tuple[Any, str, bool]:
         # see json source
         pass  # pragma: no cover
 
-    def __call__(self) -> dict[str, Any]:
+    def __call__(self) -> Dict[str, Any]:
         try:
             import tomli
         except ImportError:
