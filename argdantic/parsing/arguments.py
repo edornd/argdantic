@@ -134,7 +134,7 @@ class FlagArgument(Argument):
         tracker = MultiActionTracker([tracker_true, tracker_false])
         # add the arguments to the group and set the default value, if any
         negative_field_names = [f"--no-{name.lstrip('-')}" for name in self.field_names]
-        group.add_argument(*self.field_names, dest=self.identifier, action=tracker_true)
+        group.add_argument(*self.field_names, dest=self.identifier, action=tracker_true, help=self.description)
         group.add_argument(*negative_field_names, dest=self.identifier, action=tracker_false)
         default = self.default if self.default is not None else False
         parser.set_defaults(**{self.identifier: default})
