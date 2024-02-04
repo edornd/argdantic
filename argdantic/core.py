@@ -12,6 +12,9 @@ from argdantic.parsing import Argument
 from argdantic.stores import SettingsStoreCallable
 
 
+SettingSourceCallable = Callable[[Type[BaseSettings]], PydanticBaseSettingsSource]
+
+
 class Command:
     """
     A command represents a single function that can be invoked from the command line.
@@ -230,8 +233,8 @@ class ArgParser:
         self,
         name: Optional[str] = None,
         help: Optional[str] = None,
-        sources: List[PydanticBaseSettingsSource] = None,
-        stores: List[SettingsStoreCallable] = None,
+        sources: Optional[List[SettingSourceCallable]] = None,
+        stores: Optional[List[SettingsStoreCallable]] = None,
         singleton: bool = False,
     ) -> Callable:
         """Decorator to register a function as a command.
