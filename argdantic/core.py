@@ -209,6 +209,7 @@ class ArgParser:
 
         # then build the entrypoint for the current parser
         if len(self.commands) == 1 and not self.groups and not self.force_group:
+            parser.description = self.commands[0].description
             self.commands[0].build(parser=parser)
         else:
             subparsers = self._get_subparser(parser, destination=f"__group{level}__")
