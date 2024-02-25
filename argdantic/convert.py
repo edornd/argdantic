@@ -1,5 +1,6 @@
 import argparse
 from argparse import ArgumentParser
+from pathlib import Path
 from typing import Any, Dict, Tuple, Type, get_args
 
 from pydantic import BaseModel
@@ -8,6 +9,7 @@ from pydantic.v1.utils import lenient_issubclass
 from pydantic_core import PydanticUndefined
 
 from argdantic.parsing import ActionTracker, PrimitiveArgument, registry
+from argdantic.sources.base import SourceBaseModel
 from argdantic.utils import is_optional
 
 
@@ -45,6 +47,7 @@ def argument_from_field(
     delimiter: str,
     internal_delimiter: str,
     parent_path: Tuple[str, ...],
+    custom_identifier: str = None,
 ) -> None:
     """Converts a pydantic field to a single argument.
 
@@ -66,7 +69,7 @@ def argument_from_field(
     extra_names = extra_fields.get("names", ())
 
     # example.test-attribute -> example__test_attribute
-    identifier = base_option_name.replace(delimiter, internal_delimiter).replace("-", "_")
+    identifier = custom_identifier or base_option_name.replace(delimiter, internal_delimiter).replace("-", "_")
     # handle optional types, the only case where we currently support Unions
     field_type = field_info.annotation
     if is_optional(field_info.annotation):
@@ -117,6 +120,28 @@ def model_to_args(
                 internal_delimiter,
                 parent_path=parent_path + (kebab_name,),
             )
+            # if the model requires a file source, we add an extra argument
+            # whose name is the same as the model's name
+            if lenient_issubclass(field_info.annotation, SourceBaseModel):
+                info = FieldInfo(
+                    annotation=Path,
+                    alias=field_info.alias,
+                    title=field_info.title,
+                    description=field_info.description,
+                    default=field_info.default,
+                    json_schema_extra=field_info.json_schema_extra,
+                )
+                base_name = delimiter.join(parent_path + (kebab_name,))
+                internal_name = base_name.replace(delimiter, internal_delimiter).replace("-", "_")
+                custom_identifier = f"{internal_name}___source"
+                yield argument_from_field(
+                    field_info=info,
+                    kebab_name=kebab_name,
+                    delimiter=delimiter,
+                    internal_delimiter=internal_delimiter,
+                    parent_path=parent_path,
+                    custom_identifier=custom_identifier,
+                )
             continue
         # simple fields
         yield argument_from_field(

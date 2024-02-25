@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 import mock
 from pydantic_settings import BaseSettings
+from pytest import CaptureFixture
 
 from argdantic.sources.base import FileSettingsSource
 from argdantic.testing import CLIRunner
@@ -55,3 +56,44 @@ def test_parser_using_json_source(tmp_path: Path, runner: CLIRunner) -> None:
     result = runner.invoke(parser, [])
     assert result.exception is None
     assert result.return_value == ("baz", 42)
+
+
+def test_json_sourced_model(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
+    from argdantic import ArgParser
+    from argdantic.sources import JsonModel
+
+    path = create_json_file({"foo": "baz", "bar": 42}, tmp_path / "settings.json")
+    parser = ArgParser()
+
+    class TestModel(JsonModel):
+        foo: str = "default"
+        bar: int = 0
+
+    @parser.command()
+    def main(model: TestModel) -> None:
+        return model.model_dump()
+
+    # check if the cli requires the model argument
+    result = runner.invoke(parser, [])
+    output = capsys.readouterr()
+
+    assert result.exception is None
+    assert not output.out
+    assert "error: the following arguments are required: --model" in output.err.rstrip()
+
+    # check if the help message contains 'model', together with 'model.foo' and 'model.bar'
+    result = runner.invoke(parser, ["--help"])
+    output = capsys.readouterr()
+    assert "--model " in output.out
+    assert "--model.foo" in output.out
+    assert "--model.bar" in output.out
+
+    # check that the model is populated with the values from the JSON file
+    result = runner.invoke(parser, ["--model", str(path)])
+    assert result.exception is None
+    assert result.return_value == {"foo": "baz", "bar": 42}
+
+    # check that the CLI argument overrides the JSON file
+    result = runner.invoke(parser, ["--model", str(path), "--model.foo", "overridden"])
+    assert result.exception is None
+    assert result.return_value == {"foo": "overridden", "bar": 42}

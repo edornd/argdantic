@@ -58,3 +58,44 @@ def test_parser_using_yaml_source(tmp_path: Path, runner: CLIRunner) -> None:
     result = runner.invoke(parser, [])
     assert result.exception is None
     assert result.return_value == ("baz", 42)
+
+
+def test_yaml_sourced_model(tmp_path: Path, runner: CLIRunner, capsys: pytest.CaptureFixture) -> None:
+    from argdantic import ArgParser
+    from argdantic.sources import YamlModel
+
+    path = create_yaml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.yaml")
+    parser = ArgParser()
+
+    class TestModel(YamlModel):
+        foo: str = "default"
+        bar: int = 0
+
+    @parser.command()
+    def main(model: TestModel) -> None:
+        return model.model_dump()
+
+    # check if the cli requires the model argument
+    result = runner.invoke(parser, [])
+    output = capsys.readouterr()
+
+    assert result.exception is None
+    assert not output.out
+    assert "error: the following arguments are required: --model" in output.err.rstrip()
+
+    # check if the help message contains 'model', together with 'model.foo' and 'model.bar'
+    result = runner.invoke(parser, ["--help"])
+    output = capsys.readouterr()
+    assert "--model " in output.out
+    assert "--model.foo" in output.out
+    assert "--model.bar" in output.out
+
+    # check that the model is populated with the values from the JSON file
+    result = runner.invoke(parser, ["--model", str(path)])
+    assert result.exception is None
+    assert result.return_value == {"foo": "baz", "bar": 42}
+
+    # check that the CLI argument overrides the JSON file
+    result = runner.invoke(parser, ["--model", str(path), "--model.foo", "overridden"])
+    assert result.exception is None
+    assert result.return_value == {"foo": "overridden", "bar": 42}
