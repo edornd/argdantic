@@ -12,14 +12,14 @@ from argdantic.sources import (
 
 
 class Image(BaseModel):
-    url: str
-    name: str
+    url: str = None
+    name: str = None
 
 
 class Item(BaseModel):
-    name: str
+    name: str = "test"
     description: str = None
-    price: float
+    price: float = 10.0
     tags: Set[str] = set()
     image: Image = None
 
@@ -30,9 +30,9 @@ cli = ArgParser()
 @cli.command(
     sources=[
         EnvSettingsSource(env_file=".env"),
-        JsonSettingsSource(json_file="settings.json"),
-        YamlSettingsSource(yaml_file="settings.yaml"),
-        TomlSettingsSource(toml_file="settings.toml"),
+        JsonSettingsSource(path="settings.json"),
+        YamlSettingsSource(path="settings.yaml"),
+        TomlSettingsSource(path="settings.toml"),
     ]
 )
 def create_item(item: Item):

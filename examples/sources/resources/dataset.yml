@@ -1,0 +1,4 @@
+name: coco
+batch_size: 32
+tile_size: 512
+shuffle: true

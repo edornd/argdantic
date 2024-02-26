@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Type, Union
 
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from pydantic_settings.sources import DotEnvSettingsSource as PydanticEnvSource
 from pydantic_settings.sources import DotenvType
@@ -18,6 +19,21 @@ class ArgdanticSource(ABC):
     @abstractmethod
     def __call__(self, settings_cls: Type[BaseSettings]) -> PydanticBaseSettingsSource:
         raise NotImplementedError  # pragma: no cover
+
+
+class SourceBaseModel(BaseModel):
+    """
+    A base model that reads additional settings from a file.
+    This helps making the CLI more flexible and allow composability via file.
+    """
+
+    def __init__(self, _source: Path, _source_cls: ArgdanticSource, **data) -> None:
+        if _source is not None:
+            reader = _source_cls(self, _source)
+            extra_data = reader()
+            extra_data.update(data)
+            data = extra_data
+        super().__init__(**data)
 
 
 class FileSettingsSource(ABC):

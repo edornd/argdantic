@@ -3,7 +3,7 @@ from typing import Any, Dict, Tuple, Type, Union
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
-from argdantic.sources.base import FileSettingsSource
+from argdantic.sources.base import FileSettingsSource, SourceBaseModel
 
 
 class PydanticJsonSource(PydanticBaseSettingsSource):
@@ -43,3 +43,12 @@ class JsonSettingsSource(FileSettingsSource):
 
     def __repr__(self) -> str:
         return f"<JsonSettingsSource path={self.path}>"
+
+
+class JsonModel(SourceBaseModel):
+    """
+    A base model that reads additional settings from a JSON file.
+    """
+
+    def __init__(self, _source: Path = None, **data) -> None:
+        super().__init__(_source, PydanticJsonSource, **data)

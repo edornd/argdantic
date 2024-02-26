@@ -1,0 +1,11 @@
+item:
+  name: example
+  description: Example item
+  price: 2.3
+  tags:
+    - example
+    - item
+    - tag
+  image:
+    url: https://example.com/image.jpg
+    name: example.jpg
