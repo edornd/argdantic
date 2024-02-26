@@ -1,0 +1,3 @@
+name: "adam"
+learning_rate: 0.001
+momentum: 0.9
