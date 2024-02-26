@@ -133,7 +133,7 @@ def model_to_args(
                 )
                 base_name = delimiter.join(parent_path + (kebab_name,))
                 internal_name = base_name.replace(delimiter, internal_delimiter).replace("-", "_")
-                custom_identifier = f"{internal_name}___source"
+                custom_identifier = f"{internal_name}{internal_delimiter}_source"
                 yield argument_from_field(
                     field_info=info,
                     kebab_name=kebab_name,
