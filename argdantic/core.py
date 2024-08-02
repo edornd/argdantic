@@ -1,6 +1,6 @@
 import inspect
 from argparse import ArgumentParser, Namespace, _SubParsersAction
-from typing import Any, Callable, List, Optional, Sequence, Type, TypeVar
+from typing import Any, Callable, Generic, Iterable, List, Sequence, Type, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError, create_model
 from pydantic.v1.utils import lenient_issubclass
@@ -9,9 +9,11 @@ from pydantic_settings.sources import PydanticBaseSettingsSource
 
 from argdantic.convert import args_to_dict_tree, model_to_args
 from argdantic.parsing import Argument
+from argdantic.parsing.arguments import ActionTracker
 from argdantic.stores import SettingsStoreCallable
 
 SettingSourceCallable = Callable[[Type[BaseSettings]], PydanticBaseSettingsSource]
+ParserType = TypeVar("ParserType", bound="ArgParser")
 
 
 class Command:
@@ -24,12 +26,12 @@ class Command:
     def __init__(
         self,
         callback: Callable,
-        arguments: Sequence[Argument],
+        arguments: Iterable[Argument],
         model_class: Type[BaseModel],
-        name: str = None,
-        description: str = None,
+        name: str,
+        description: str | None = None,
         singleton: bool = False,
-        stores: List[SettingsStoreCallable] = None,
+        stores: List[SettingsStoreCallable] | None = None,
         delimiter: str = "__",
     ) -> None:
         assert callback is not None, "Callback must be a callable object"
@@ -41,7 +43,7 @@ class Command:
         self.delimiter = delimiter
         self.arguments = arguments or []
         self.stores = stores or []
-        self.trackers = {}
+        self.trackers: dict[str, ActionTracker] = {}
 
     def __repr__(self) -> str:
         return f"<Command {self.name}>"
@@ -92,10 +94,7 @@ class Command:
         parser.set_defaults(__func__=self)
 
 
-ParserType = TypeVar("ParserType", bound="ArgParser")
-
-
-class ArgParser:
+class ArgParser(Generic[ParserType]):
     """
     A parser is a collection of commands and subparsers.
     It is responsible for building the entrypoint for the command line interface,
@@ -104,17 +103,17 @@ class ArgParser:
 
     def __init__(
         self,
-        name: str = None,
-        description: str = None,
+        name: str | None = None,
+        description: str | None = None,
         force_group: bool = False,
         delimiter: str = ".",
         internal_delimiter: str = "__",
         subcommand_meta: str = "<command>",
     ) -> None:
-        self.name: str = name
-        self.entrypoint: ArgumentParser = None
-        self.description: str = description
-        self.force_group: bool = force_group
+        self.entrypoint: ArgumentParser | None = None
+        self.name = name
+        self.description = description
+        self.force_group = force_group
         self.commands: List[Command] = []
         self.groups: List[ParserType] = []
         # internal variables
@@ -126,13 +125,13 @@ class ArgParser:
         self._subcommand_meta = subcommand_meta
         # keeping a reference to subparser is necessary to add subparsers
         # Each cli level can only have one subparser.
-        self._subparser: _SubParsersAction = None
+        self._subparser: _SubParsersAction | None = None
 
     def __repr__(self) -> str:
         name = f" '{self.name}'" if self.name else ""
         return f"<Parser{name}(commands={self.commands})>"
 
-    def __call__(self, args: Sequence[Any] = None) -> Any:
+    def __call__(self, args: Namespace | None = None) -> Any:
         """
         Invoke the parser by building the entrypoint and parsing the arguments.
         The result is the return value of the callback of the invoked command.
@@ -146,7 +145,7 @@ class ArgParser:
         if self.entrypoint is None:
             self.entrypoint = self._build_entrypoint()
         try:
-            args = self.entrypoint.parse_args(args)
+            args = self.entrypoint.parse_args(cast(Sequence[str], args))
             return args.__func__(args)
         except ValidationError as e:
             self.entrypoint.error(self._format_validation_error(e))
@@ -170,8 +169,8 @@ class ArgParser:
             location = " -> ".join(str(e) for e in error["loc"])
             max_len = max(max_len, len(location))
             body.append((location, error["msg"]))
-        body = "\n".join(f"{location:<{max_len}}: {msg}" for location, msg in body)
-        return f"{intro}{body}"
+        body_str = "\n".join(f"{location:<{max_len}}: {msg}" for location, msg in body)
+        return f"{intro}{body_str}"
 
     def _get_subparser(
         self,
@@ -192,7 +191,7 @@ class ArgParser:
             self._subparser = parser.add_subparsers(dest=destination, required=True, metavar=self._subcommand_meta)
         return self._subparser
 
-    def _build_entrypoint(self, parser: ArgumentParser = None, level: int = 0) -> ArgumentParser:
+    def _build_entrypoint(self, parser: ArgumentParser | None = None, level: int = 0) -> ArgumentParser:
         """
         Construct the entrypoint for the command line interface. This is a recursive
         function that builds the entrypoint for the current parser and all subparsers.
@@ -231,10 +230,10 @@ class ArgParser:
 
     def command(
         self,
-        name: Optional[str] = None,
-        help: Optional[str] = None,
-        sources: Optional[List[SettingSourceCallable]] = None,
-        stores: Optional[List[SettingsStoreCallable]] = None,
+        name: str | None = None,
+        help: str | None = None,
+        sources: list[SettingSourceCallable] | None = None,
+        stores: List[SettingsStoreCallable] | None = None,
         singleton: bool = False,
     ) -> Callable:
         """Decorator to register a function as a command.
@@ -304,12 +303,14 @@ class ArgParser:
                         # this is needed to make sure that the config class is properly
                         # initialized with the sources declared by the user on CLI init.
                         # Env and file sources are discarded, the user must provide them explicitly.
-                        callables = [source(settings_cls) for source in sources]
-                        return (init_settings, *callables)
+                        if sources is not None:
+                            callables = [source(settings_cls) for source in sources]
+                            return (*callables, init_settings)
+                        return (init_settings,)
 
                 model_class = SourceSettings if model_class is None else (model_class, SourceSettings)
 
-            cfg_class = create_model(
+            cfg_class = create_model(  # type: ignore
                 "WrapperModel",
                 **wrapped_fields,
                 __base__=model_class,
@@ -332,7 +333,7 @@ class ArgParser:
 
         return decorator
 
-    def add_parser(self, parser: ParserType, name: str = None) -> None:
+    def add_parser(self, parser: ParserType, name: str | None = None) -> None:
         """
         Add a subparser to the current parser.
 

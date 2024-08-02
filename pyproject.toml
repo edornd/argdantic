@@ -5,13 +5,14 @@ requires = ["flit_core >=3.2,<4"]
 [project]
 authors = [{ name = "Edoardo Arnaudo", email = "edoardo.arn@gmail.com" }]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Topic :: Software Development",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
   "Intended Audience :: Information Technology",
   "Intended Audience :: Science/Research",

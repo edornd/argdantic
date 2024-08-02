@@ -3,7 +3,7 @@ import typing as types
 from pydantic.v1.utils import lenient_issubclass
 
 
-def type_name(field_type: type) -> str:
+def type_name(field_type: type[types.Any]) -> str:
     """Returns the name of the type, or the name of the type's origin, if the type is a
     typing construct.
     Args:
@@ -19,7 +19,7 @@ def type_name(field_type: type) -> str:
     return name.lower()
 
 
-def is_multiple(field_type: type) -> bool:
+def is_multiple(field_type: type[types.Any]) -> bool:
     """Checks whether the current type is a container type ('contains' other types), like
     lists and tuples.
     Args:
@@ -40,7 +40,7 @@ def is_multiple(field_type: type) -> bool:
     return lenient_issubclass(origin, types.Sequence)
 
 
-def is_mapping(field_type: type) -> bool:
+def is_mapping(field_type: type[types.Any]) -> bool:
     """Checks whether this field represents a dictionary or JSON object.
     Args:
         field_type (type): pydantic type
@@ -57,7 +57,7 @@ def is_mapping(field_type: type) -> bool:
     return lenient_issubclass(origin, types.Mapping)
 
 
-def is_container(field_type: type) -> bool:
+def is_container(field_type: type[types.Any]) -> bool:
     """Checks whether the current type is a container type ('contains' other types), like
     lists and tuples.
     Args:
@@ -78,7 +78,7 @@ def is_container(field_type: type) -> bool:
     return False
 
 
-def is_typing(field_type: type) -> bool:
+def is_typing(field_type: type[types.Any]) -> bool:
     """Checks whether the current type is a module-like type.
     Args:
         field_type (type): pydantic field type
@@ -91,7 +91,7 @@ def is_typing(field_type: type) -> bool:
     return raw is type or raw is types.Type
 
 
-def is_optional(field_type: type) -> bool:
+def is_optional(field_type: type[types.Any] | None) -> bool:
     """Checks whether the current type is an optional type.
     Args:
         field_type (type): pydantic field type

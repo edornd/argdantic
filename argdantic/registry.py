@@ -1,47 +1,47 @@
-import typing as types
 from collections.abc import MutableMapping
+from typing import Any, Iterator, Type, Union, get_origin
 
 
 class Registry(MutableMapping):
     """Simple class registry for mapping types and their argument handlers."""
 
     def __init__(self) -> None:
-        self.store = dict()
+        self.store: dict[type, Any] = dict()
 
-    def __getitem__(self, key: type) -> types.Any:
+    def __getitem__(self, key: type) -> Any:
         # do not allow Union types (unless they are Optional, handled in conversion)
-        if types.get_origin(key) is types.Union:
+        if get_origin(key) is Union:
             raise ValueError("Union types are not supported, please specify a single type.")
         try:
             hierarchy = key.mro()[:-1]
         # avoid look-up errors for non-classes (Literals, etc.)
         except AttributeError:
-            origin = types.get_origin(key)
+            origin = get_origin(key)
             hierarchy = [origin] if origin else [key]
         for type_class in hierarchy:
             if type_class in self.store:
                 return self.store[type_class]
 
-    def __setitem__(self, key: type, value: types.Any) -> None:
+    def __setitem__(self, key: type, value: Any) -> None:
         return self.store.__setitem__(key, value)
 
     def __delitem__(self, key: type) -> None:
         return self.store.__delitem__(key)
 
-    def __iter__(self) -> types.Iterator[types.Any]:
+    def __iter__(self) -> Iterator[Any]:
         return self.store.__iter__()
 
     def __len__(self) -> int:
         return self.store.__len__()
 
-    def get(self, key: type, default: types.Any = None) -> types.Any:
+    def get(self, key: type, default: Any = None) -> Any:
         value = self[key] or default
         return value
 
-    def register(self, *keys: types.Any):
+    def register(self, *keys: Any):
         assert keys is not None and len(keys) > 0, "Keys required!"
 
-        def decorator(cls: types.Type[types.Any]):
+        def decorator(cls: Type[Any]):
             for key in keys:
                 self.store[key] = cls
             return cls

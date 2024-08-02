@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Set, Union
 
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 
-SettingsStoreCallable = Callable[["BaseSettings"], None]
+SettingsStoreCallable = Callable[["BaseSettings" | "BaseModel"], None]
 
 
 class BaseSettingsStore(ABC):
@@ -18,8 +19,8 @@ class BaseSettingsStore(ABC):
         path: Union[str, Path],
         *,
         encoding: str = "utf-8",
-        include: Set[str] = None,
-        exclude: Set[str] = None,
+        include: Set[str] | None = None,
+        exclude: Set[str] | None = None,
         by_alias: bool = False,
         exclude_unset: bool = False,
         exclude_defaults: bool = False,

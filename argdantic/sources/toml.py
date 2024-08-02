@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, Tuple, Type, Union
+from typing import Any, Dict, Type, Union
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
@@ -15,10 +15,6 @@ class PydanticTomlSource(PydanticBaseSettingsSource):
     def __init__(self, settings_cls: Type[BaseSettings], path: Union[str, Path]):
         super().__init__(settings_cls)
         self.path = Path(path)
-
-    def get_field_value(self, *args) -> Tuple[Any, str, bool]:
-        # see json source
-        pass  # pragma: no cover
 
     def __call__(self) -> Dict[str, Any]:
         try:

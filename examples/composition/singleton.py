@@ -13,7 +13,7 @@ class Image(BaseModel):
 class Item(BaseModel):
     name: str
     description: str
-    image: Image = None
+    image: Image | None = None
     dates: List[date]
 
 

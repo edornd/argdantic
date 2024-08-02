@@ -1,19 +1,19 @@
 import argparse
-from argparse import ArgumentParser
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Dict, Tuple, Type, get_args
+from typing import Any, Dict, Optional, Tuple, Type, cast, get_args
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 from pydantic.v1.utils import lenient_issubclass
 from pydantic_core import PydanticUndefined
 
-from argdantic.parsing import ActionTracker, PrimitiveArgument, registry
+from argdantic.parsing import ActionTracker, Argument, PrimitiveArgument, registry
 from argdantic.sources.base import SourceBaseModel
 from argdantic.utils import is_optional
 
 
-def format_description(description: str, has_default: bool, is_required: bool) -> str:
+def format_description(description: str | None, has_default: bool, is_required: bool) -> str:
     """Formats the field description, adding additional info about defaults and if it is required.
 
     Args:
@@ -35,7 +35,7 @@ def format_description(description: str, has_default: bool, is_required: bool) -
     # - when there is no description, return the prefix as is (also handles None)
     # - when there is both, return the prefix and description
     if suffix is None:
-        return description
+        return description or ""
     if description is None:
         return suffix
     return f"{description} {suffix}"
@@ -47,8 +47,8 @@ def argument_from_field(
     delimiter: str,
     internal_delimiter: str,
     parent_path: Tuple[str, ...],
-    custom_identifier: str = None,
-) -> None:
+    custom_identifier: Optional[str] = None,
+) -> Argument:
     """Converts a pydantic field to a single argument.
 
     Args:
@@ -65,13 +65,15 @@ def argument_from_field(
     assert not lenient_issubclass(field_info.annotation, BaseModel)
     base_option_name = delimiter.join(parent_path + (kebab_name,))
     full_option_name = f"--{base_option_name}"
-    extra_fields = field_info.json_schema_extra or {}
+    extra_fields: dict[str, Any] = (
+        field_info.json_schema_extra or {} if isinstance(field_info.json_schema_extra, dict) else {}
+    )
     extra_names = extra_fields.get("names", ())
 
     # example.test-attribute -> example__test_attribute
     identifier = custom_identifier or base_option_name.replace(delimiter, internal_delimiter).replace("-", "_")
     # handle optional types, the only case where we currently support Unions
-    field_type = field_info.annotation
+    field_type: type[Any] = field_info.annotation  # type: ignore
     if is_optional(field_info.annotation):
         field_type = get_args(field_info.annotation)[0]
 
@@ -96,7 +98,7 @@ def model_to_args(
     delimiter: str,
     internal_delimiter: str,
     parent_path: Tuple[str, ...] = tuple(),
-) -> ArgumentParser:
+) -> Generator[Argument, None, None]:
     """Converts a pydantic model to a list of arguments.
 
     Args:
@@ -115,7 +117,7 @@ def model_to_args(
         assert internal_delimiter not in kebab_name
         if lenient_issubclass(field_info.annotation, BaseModel):
             yield from model_to_args(
-                field_info.annotation,
+                cast(type[BaseModel], field_info.annotation),
                 delimiter,
                 internal_delimiter,
                 parent_path=parent_path + (kebab_name,),
@@ -157,7 +159,7 @@ def args_to_dict_tree(
     kwargs: Dict[str, Any],
     internal_delimiter: str,
     remove_helpers: bool = True,
-    cli_trackers: Dict[str, ActionTracker] = None,
+    cli_trackers: dict[str, ActionTracker] | None = None,
 ) -> Dict[str, Any]:
     """Transforms a flat dictionary of identifiers and values back into a complex object made of nested dictionaries.
     E.g. the following input: `animal__type='dog', animal__name='roger', animal__owner__name='Mark'`
