@@ -44,8 +44,8 @@ class SourceBaseModel(BaseModel):
 
     def __init__(self, _source: Path, _source_cls: type[FileSettingsSource], **data) -> None:
         if _source is not None:
-            reader = _source_cls(_source)
-            extra_data = reader(self)
+            reader = _source_cls(self, _source)
+            extra_data = reader()
             extra_data.update(data)
             data = extra_data
         super().__init__(**data)

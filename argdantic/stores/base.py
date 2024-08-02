@@ -5,7 +5,7 @@ from typing import Callable, Set, Union
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 
-SettingsStoreCallable = Callable[["BaseSettings" | "BaseModel"], None]
+SettingsStoreCallable = Callable[[Union[BaseSettings, BaseModel]], None]
 
 
 class BaseSettingsStore(ABC):

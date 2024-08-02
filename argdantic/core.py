@@ -233,7 +233,7 @@ class ArgParser(Generic[ParserType]):
         name: str | None = None,
         help: str | None = None,
         sources: list[SettingSourceCallable] | None = None,
-        stores: List[SettingsStoreCallable] | None = None,
+        stores: list[SettingsStoreCallable] | None = None,
         singleton: bool = False,
     ) -> Callable:
         """Decorator to register a function as a command.
