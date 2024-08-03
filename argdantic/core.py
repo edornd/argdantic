@@ -1,6 +1,6 @@
 import inspect
 from argparse import ArgumentParser, Namespace, _SubParsersAction
-from typing import Any, Callable, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, cast
+from typing import Any, Callable, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, cast, get_type_hints
 
 from pydantic import BaseModel, ValidationError, create_model
 from pydantic.v1.utils import lenient_issubclass
@@ -256,6 +256,7 @@ class ArgParser(Generic[ParserType]):
             command_help = help or inspect.getdoc(f)
             # extract function parameters and prepare list of click params
             # assign the same function as callback for empty commands
+            f.__annotations__ = get_type_hints(f)
             func_params = list(inspect.signature(f).parameters.items())
             # if we have a configuration parse it, otherwise handle empty commands
             # wrap everything into a wrapper model, so that multiple inputs can be provided
