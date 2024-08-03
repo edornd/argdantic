@@ -8,13 +8,11 @@ repos:
       - id: check-toml
       - id: end-of-file-fixer
       - id: trailing-whitespace
-  - repo: https://github.com/psf/black
-    rev: 22.10.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.5.6
     hooks:
-      - id: black
-        args: [--check]
-  - repo: https://github.com/PyCQA/flake8
-    rev: 4.0.1
-    hooks:
-      - id: flake8
-        args: [--max-line-length=120, argdantic, tests]
+      # Run the linter.
+      - id: ruff
+      # Run the formatter.
+      - id: ruff-format

@@ -1,5 +1,5 @@
-import typing as t
 from argparse import OPTIONAL, Action, ArgumentParser, Namespace
+from typing import Any, Iterable, Optional, Sequence, Union
 
 
 def _copy_items(items):
@@ -23,9 +23,9 @@ class StoreAction(Action):
 
     def __init__(
         self,
-        option_strings: t.Sequence[str],
+        option_strings: Sequence[str],
         dest: str,
-        nargs: int | str | None = None,
+        nargs: Optional[Union[int, str]] = None,
         **kwargs,
     ) -> None:
         super().__init__(option_strings=option_strings, dest=dest, nargs=nargs, **kwargs)
@@ -35,8 +35,8 @@ class StoreAction(Action):
         self,
         parser: ArgumentParser,
         namespace: Namespace,
-        values: str | t.Sequence[t.Any] | None,
-        option_string: str | None = None,
+        values: Optional[Union[Sequence[Any], str]],
+        option_string: Optional[str] = None,
     ) -> None:
         setattr(namespace, self.dest, values)
         self._specified = True
@@ -49,10 +49,10 @@ class StoreAction(Action):
 class StoreConstAction(StoreAction):
     def __init__(
         self,
-        option_strings: t.Sequence[str],
+        option_strings: Sequence[str],
         dest: str,
-        const: t.Any,
-        nargs: t.Union[int, str] = 0,
+        const: Any,
+        nargs: Union[int, str] = 0,
         **kwargs: dict,
     ) -> None:
         nargs = 0
@@ -62,14 +62,14 @@ class StoreConstAction(StoreAction):
         self,
         parser: ArgumentParser,
         namespace: Namespace,
-        values: str | t.Sequence[t.Any] | None,
-        option_string: str | None = None,
+        values: Optional[Union[Sequence[Any], str]],
+        option_string: Optional[str] = None,
     ) -> None:
         return super().__call__(parser, namespace, self.const, option_string)
 
 
 class StoreTrueAction(StoreConstAction):
-    def __init__(self, option_strings: t.Sequence[str], dest: str, **kwargs: t.Any) -> None:
+    def __init__(self, option_strings: Sequence[str], dest: str, **kwargs: Any) -> None:
         super().__init__(
             option_strings,
             dest,
@@ -79,7 +79,7 @@ class StoreTrueAction(StoreConstAction):
 
 
 class StoreFalseAction(StoreConstAction):
-    def __init__(self, option_strings: t.Sequence[str], dest: str, **kwargs: t.Any) -> None:
+    def __init__(self, option_strings: Sequence[str], dest: str, **kwargs: Any) -> None:
         super().__init__(
             option_strings,
             dest,
@@ -91,10 +91,10 @@ class StoreFalseAction(StoreConstAction):
 class AppendAction(StoreAction):
     def __init__(
         self,
-        option_strings: t.Sequence[str],
+        option_strings: Sequence[str],
         dest: str,
-        nargs: t.Union[int, str, None],
-        const: t.Any = None,
+        nargs: Optional[Union[int, str]],
+        const: Optional[Any] = None,
         **kargs: dict,
     ) -> None:
         if nargs == 0:
@@ -113,11 +113,11 @@ class AppendAction(StoreAction):
         self,
         parser: ArgumentParser,
         namespace: Namespace,
-        values: str | t.Sequence[t.Any] | None,
-        option_string: str | None = None,
+        values: Optional[Union[str, Sequence[Any]]],
+        option_string: Optional[str] = None,
     ) -> None:
         items = getattr(namespace, self.dest, None)
         items = list(_copy_items(items))
-        assert isinstance(values, t.Iterable)
+        assert isinstance(values, Iterable)
         items.extend(values)
         super().__call__(parser, namespace, items, option_string)

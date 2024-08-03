@@ -1,7 +1,6 @@
 import argparse
-from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Type, cast, get_args
+from typing import Any, Dict, Generator, Optional, Tuple, Type, cast, get_args
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
@@ -13,7 +12,7 @@ from argdantic.sources.base import SourceBaseModel
 from argdantic.utils import is_optional
 
 
-def format_description(description: str | None, has_default: bool, is_required: bool) -> str:
+def format_description(description: Optional[str], has_default: bool, is_required: bool) -> str:
     """Formats the field description, adding additional info about defaults and if it is required.
 
     Args:
@@ -73,7 +72,7 @@ def argument_from_field(
     # example.test-attribute -> example__test_attribute
     identifier = custom_identifier or base_option_name.replace(delimiter, internal_delimiter).replace("-", "_")
     # handle optional types, the only case where we currently support Unions
-    field_type: type[Any] = field_info.annotation  # type: ignore
+    field_type: Type[Any] = field_info.annotation  # type: ignore
     if is_optional(field_info.annotation):
         field_type = get_args(field_info.annotation)[0]
 
@@ -117,7 +116,7 @@ def model_to_args(
         assert internal_delimiter not in kebab_name
         if lenient_issubclass(field_info.annotation, BaseModel):
             yield from model_to_args(
-                cast(type[BaseModel], field_info.annotation),
+                cast(Type[BaseModel], field_info.annotation),
                 delimiter,
                 internal_delimiter,
                 parent_path=parent_path + (kebab_name,),
@@ -159,7 +158,7 @@ def args_to_dict_tree(
     kwargs: Dict[str, Any],
     internal_delimiter: str,
     remove_helpers: bool = True,
-    cli_trackers: dict[str, ActionTracker] | None = None,
+    cli_trackers: Optional[Dict[str, ActionTracker]] = None,
 ) -> Dict[str, Any]:
     """Transforms a flat dictionary of identifiers and values back into a complex object made of nested dictionaries.
     E.g. the following input: `animal__type='dog', animal__name='roger', animal__owner__name='Mark'`

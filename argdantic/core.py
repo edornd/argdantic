@@ -1,6 +1,6 @@
 import inspect
 from argparse import ArgumentParser, Namespace, _SubParsersAction
-from typing import Any, Callable, Generic, Iterable, List, Sequence, Type, TypeVar, cast
+from typing import Any, Callable, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError, create_model
 from pydantic.v1.utils import lenient_issubclass
@@ -29,9 +29,9 @@ class Command:
         arguments: Iterable[Argument],
         model_class: Type[BaseModel],
         name: str,
-        description: str | None = None,
+        description: Optional[str] = None,
         singleton: bool = False,
-        stores: List[SettingsStoreCallable] | None = None,
+        stores: Optional[List[SettingsStoreCallable]] = None,
         delimiter: str = "__",
     ) -> None:
         assert callback is not None, "Callback must be a callable object"
@@ -103,8 +103,8 @@ class ArgParser(Generic[ParserType]):
 
     def __init__(
         self,
-        name: str | None = None,
-        description: str | None = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
         force_group: bool = False,
         delimiter: str = ".",
         internal_delimiter: str = "__",
@@ -131,7 +131,7 @@ class ArgParser(Generic[ParserType]):
         name = f" '{self.name}'" if self.name else ""
         return f"<Parser{name}(commands={self.commands})>"
 
-    def __call__(self, args: Namespace | None = None) -> Any:
+    def __call__(self, args: Optional[Namespace] = None) -> Any:
         """
         Invoke the parser by building the entrypoint and parsing the arguments.
         The result is the return value of the callback of the invoked command.
@@ -191,7 +191,7 @@ class ArgParser(Generic[ParserType]):
             self._subparser = parser.add_subparsers(dest=destination, required=True, metavar=self._subcommand_meta)
         return self._subparser
 
-    def _build_entrypoint(self, parser: ArgumentParser | None = None, level: int = 0) -> ArgumentParser:
+    def _build_entrypoint(self, parser: Optional[ArgumentParser] = None, level: int = 0) -> ArgumentParser:
         """
         Construct the entrypoint for the command line interface. This is a recursive
         function that builds the entrypoint for the current parser and all subparsers.
@@ -230,10 +230,10 @@ class ArgParser(Generic[ParserType]):
 
     def command(
         self,
-        name: str | None = None,
-        help: str | None = None,
-        sources: list[SettingSourceCallable] | None = None,
-        stores: list[SettingsStoreCallable] | None = None,
+        name: Optional[str] = None,
+        help: Optional[str] = None,
+        sources: Optional[List[SettingSourceCallable]] = None,
+        stores: Optional[List[SettingsStoreCallable]] = None,
         singleton: bool = False,
     ) -> Callable:
         """Decorator to register a function as a command.
@@ -333,7 +333,7 @@ class ArgParser(Generic[ParserType]):
 
         return decorator
 
-    def add_parser(self, parser: ParserType, name: str | None = None) -> None:
+    def add_parser(self, parser: ParserType, name: Optional[str] = None) -> None:
         """
         Add a subparser to the current parser.
 

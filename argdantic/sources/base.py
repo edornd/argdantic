@@ -42,7 +42,7 @@ class SourceBaseModel(BaseModel):
     This helps making the CLI more flexible and allow composability via file.
     """
 
-    def __init__(self, _source: Path, _source_cls: type[FileSettingsSource], **data) -> None:
+    def __init__(self, _source: Path, _source_cls: Type[FileSettingsSource], **data) -> None:
         if _source is not None:
             reader = _source_cls(self, _source)
             extra_data = reader()
@@ -59,7 +59,7 @@ class PydanticMultiEnvSource(PydanticEnvSource):
 
     def _load_env_vars(self) -> Mapping[str, Union[str, None]]:
         if self.case_sensitive:
-            env_vars = cast(dict[str, str], os.environ)
+            env_vars = cast(Dict[str, str], os.environ)
         else:
             self.env_prefix = self.env_prefix.lower()
             env_vars = {k.lower(): v for k, v in os.environ.items()}

@@ -1,9 +1,23 @@
 import json
-import typing as t
 from abc import ABC, abstractmethod
 from argparse import ArgumentParser, ArgumentTypeError
 from collections import abc, deque
 from enum import Enum
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    get_args,
+    get_origin,
+)
 
 from argdantic.parsing.actions import (
     Action,
@@ -17,7 +31,7 @@ from argdantic.utils import is_container, type_name
 
 registry = Registry()
 
-cli_types: dict[str, tuple[t.Any, str]] = {
+cli_types: Dict[str, Tuple[Any, str]] = {
     "bool": (bool, "BOOL"),
     "int": (int, "INT"),
     "float": (float, "FLOAT"),
@@ -41,11 +55,11 @@ class ActionTracker:
     specified or not. This is useful for determining if an argument has been set or not using the CLI.
     """
 
-    def __init__(self, action_class: type[Action]) -> None:
+    def __init__(self, action_class: Type[Action]) -> None:
         self.action_class = action_class
-        self.action: Action | None = None
+        self.action: Optional[Action] = None
 
-    def __call__(self, option_strings: t.Sequence[str], dest: str, **kwargs) -> t.Any:
+    def __call__(self, option_strings: Sequence[str], dest: str, **kwargs) -> Any:
         self.action = self.action_class(option_strings, dest, **kwargs)
         return self.action
 
@@ -60,7 +74,7 @@ class MultiActionTracker(ActionTracker):
     specified multiple times.
     """
 
-    def __init__(self, trackers: list[ActionTracker]) -> None:
+    def __init__(self, trackers: List[ActionTracker]) -> None:
         self.trackers = trackers
 
     def is_set(self) -> bool:
@@ -77,10 +91,10 @@ class Argument(ABC):
         self,
         *field_names: str,
         identifier: str,
-        field_type: t.Type[t.Any],
-        default: t.Any = None,
+        field_type: Type[Any],
+        default: Any = None,
         required: bool = True,
-        description: str | None = None,
+        description: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.identifier = identifier
@@ -94,9 +108,7 @@ class Argument(ABC):
     def build(self, parser: ArgumentParser) -> ActionTracker:
         raise NotImplementedError
 
-    def build_internal(
-        self, parser: ArgumentParser, *, action: type[Action], **optional_fields: t.Any
-    ) -> ActionTracker:
+    def build_internal(self, parser: ArgumentParser, *, action: Type[Action], **optional_fields: Any) -> ActionTracker:
         tracker = ActionTracker(action)
         parser.add_argument(
             *self.field_names,
@@ -174,14 +186,14 @@ class MultipleArgument(Argument):
     For example, a field type of List[int] will result in an argument that accepts multiple integers.
     """
 
-    def _type_and_count(self) -> tuple[type[t.Any], str | int, t.Any]:
+    def _type_and_count(self) -> Tuple[Type[Any], Union[str, int], Any]:
         inner_type = str
-        arg_count: str | int = "+" if self.required else "*"
-        metavar: tuple | str = cli_types[type_name(inner_type)]
+        arg_count: Union[str, int] = "+" if self.required else "*"
+        metavar: Union[tuple, str] = cli_types[type_name(inner_type)]
         if is_container(self.field_type):
             # A non-composite type has a single argument, such as 'List[int]'
             # A composite type has a tuple of arguments, like 'Tuple[str, int, int]'.
-            args = t.get_args(self.field_type)
+            args = get_args(self.field_type)
             if len(args) == 1 or (len(args) == 2 and args[1] is Ellipsis):
                 inner_type, metavar = cli_types.get(type_name(args[0]), cli_default)
             elif len(args) >= 2:
@@ -201,7 +213,7 @@ class MultipleArgument(Argument):
 
 
 @registry.register(
-    t.Literal,
+    Literal,
     Enum,
 )
 class ChoiceArgument(Argument):
@@ -211,17 +223,17 @@ class ChoiceArgument(Argument):
     to use the very same class as a custom choices argument for argparse.
     """
 
-    def __contains__(self, item: t.Any) -> bool:
+    def __contains__(self, item: Any) -> bool:
         # The control is done after the `convert` method,
         # so the item is already a value or an Enum member.
         item_set = {i.value for i in self.field_type}
         key = item if self.value_only else item.value
         return key in item_set
 
-    def __iter__(self) -> t.Iterator:
+    def __iter__(self) -> Iterator:
         return iter(self.field_type)  # type: ignore
 
-    def __next__(self) -> t.Any:
+    def __next__(self) -> Any:
         return next(iter(self.field_type))  # type: ignore
 
     def __len__(self) -> int:
@@ -231,7 +243,7 @@ class ChoiceArgument(Argument):
         str_choices = [str(i.value) if self.value_only else i.name for i in self.field_type]
         return f"[{'|'.join(str_choices)}]"
 
-    def convert(self, name: t.Any) -> t.Any:
+    def convert(self, name: Any) -> Any:
         try:
             item = self.field_type[name]
         except KeyError:
@@ -242,8 +254,8 @@ class ChoiceArgument(Argument):
 
     def build(self, parser: ArgumentParser) -> ActionTracker:
         self.value_only = False
-        if t.get_origin(self.field_type) is t.Literal:
-            self.field_type = Enum(self.identifier, {str(v): v for v in t.get_args(self.field_type)})  # type: ignore
+        if get_origin(self.field_type) is Literal:
+            self.field_type = Enum(self.identifier, {str(v): v for v in get_args(self.field_type)})  # type: ignore
             self.value_only = True
         return super().build_internal(
             parser,
@@ -256,8 +268,8 @@ class ChoiceArgument(Argument):
 
 @registry.register(
     dict,
-    t.Dict,
-    t.Mapping,
+    Dict,
+    Mapping,
 )
 class DictArgument(Argument):
     """

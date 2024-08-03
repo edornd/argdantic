@@ -21,7 +21,7 @@ class CLIRunner:
     def __init__(self, catch_exceptions: bool = True) -> None:
         self.catch_exceptions = catch_exceptions
 
-    def invoke(self, cli: ArgParser, args: Namespace | None) -> Any:
+    def invoke(self, cli: ArgParser, args: Optional[Namespace]) -> Any:
         exception = None
         exc_info = None
         result = None
