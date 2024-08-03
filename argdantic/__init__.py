@@ -1,5 +1,4 @@
-"""Typed command line interfaces with argparse and pydantic
-"""
+"""Typed command line interfaces with argparse and pydantic"""
 
 from argdantic.core import ArgParser
 from argdantic.fields import ArgField

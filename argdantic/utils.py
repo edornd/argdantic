@@ -1,9 +1,9 @@
-import typing as types
+from typing import Any, Container, Mapping, Optional, Sequence, Type, Union, get_args, get_origin
 
 from pydantic.v1.utils import lenient_issubclass
 
 
-def type_name(field_type: type) -> str:
+def type_name(field_type: Type[Any]) -> str:
     """Returns the name of the type, or the name of the type's origin, if the type is a
     typing construct.
     Args:
@@ -11,7 +11,7 @@ def type_name(field_type: type) -> str:
     Returns:
         str: name of the type
     """
-    origin = types.get_origin(field_type)
+    origin = get_origin(field_type)
     if origin is not None:
         name = origin.__name__
     else:
@@ -19,7 +19,7 @@ def type_name(field_type: type) -> str:
     return name.lower()
 
 
-def is_multiple(field_type: type) -> bool:
+def is_multiple(field_type: Type[Any]) -> bool:
     """Checks whether the current type is a container type ('contains' other types), like
     lists and tuples.
     Args:
@@ -31,16 +31,16 @@ def is_multiple(field_type: type) -> bool:
     if field_type in (str, bytes):
         return False
     # Early out for standard containers: list, tuple, range
-    if lenient_issubclass(field_type, types.Sequence):
+    if lenient_issubclass(field_type, Sequence):
         return True
-    origin = types.get_origin(field_type)
+    origin = get_origin(field_type)
     # Early out for non-typing objects
     if origin is None:
         return False
-    return lenient_issubclass(origin, types.Sequence)
+    return lenient_issubclass(origin, Sequence)
 
 
-def is_mapping(field_type: type) -> bool:
+def is_mapping(field_type: Type[Any]) -> bool:
     """Checks whether this field represents a dictionary or JSON object.
     Args:
         field_type (type): pydantic type
@@ -48,16 +48,16 @@ def is_mapping(field_type: type) -> bool:
         bool: true when the field is a dict-like object, false otherwise.
     """
     # Early out for standard containers.
-    if lenient_issubclass(field_type, types.Mapping):
+    if lenient_issubclass(field_type, Mapping):
         return True
     # for everything else or when the typing is more complex, check its origin
-    origin = types.get_origin(field_type)
+    origin = get_origin(field_type)
     if origin is None:
         return False
-    return lenient_issubclass(origin, types.Mapping)
+    return lenient_issubclass(origin, Mapping)
 
 
-def is_container(field_type: type) -> bool:
+def is_container(field_type: Type[Any]) -> bool:
     """Checks whether the current type is a container type ('contains' other types), like
     lists and tuples.
     Args:
@@ -69,33 +69,33 @@ def is_container(field_type: type) -> bool:
     if field_type in (str, bytes):
         return False
     # Early out for standard containers: list, tuple, range
-    if lenient_issubclass(field_type, types.Container):
+    if lenient_issubclass(field_type, Container):
         return True
-    origin = types.get_origin(field_type)
+    origin = get_origin(field_type)
     # Early out for non-typing objects
     if origin is not None:
-        return lenient_issubclass(origin, types.Container)
+        return lenient_issubclass(origin, Container)
     return False
 
 
-def is_typing(field_type: type) -> bool:
+def is_typing(field_type: Type[Any]) -> bool:
     """Checks whether the current type is a module-like type.
     Args:
         field_type (type): pydantic field type
     Returns:
         bool: true if the type is itself a type
     """
-    raw = types.get_origin(field_type)
+    raw = get_origin(field_type)
     if raw is None:
         return False
-    return raw is type or raw is types.Type
+    return raw is type or raw is Type
 
 
-def is_optional(field_type: type) -> bool:
+def is_optional(field_type: Optional[Type[Any]]) -> bool:
     """Checks whether the current type is an optional type.
     Args:
         field_type (type): pydantic field type
     Returns:
         bool: true if the type is optional, false otherwise
     """
-    return types.get_origin(field_type) is types.Union and type(None) in types.get_args(field_type)
+    return get_origin(field_type) is Union and type(None) in get_args(field_type)

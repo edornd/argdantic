@@ -1,14 +1,14 @@
 from typing import Any, Optional, Sequence
 
-from pydantic.fields import Field
+from pydantic import Field
 
 
 def ArgField(
     *names: Optional[Sequence[str]],
     default: Optional[Any] = ...,
     description: Optional[str] = None,
-    **extra: dict,
-) -> Field:
+    **extra: Any,
+) -> Any:
     """Create a FieldInfo object with the given arguments.
 
     This is a convenience function for creating a FieldInfo object

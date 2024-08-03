@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Type, Union
+from typing import Any, Dict, Mapping, Optional, Type, Union, cast
 
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
@@ -21,21 +21,6 @@ class ArgdanticSource(ABC):
         raise NotImplementedError  # pragma: no cover
 
 
-class SourceBaseModel(BaseModel):
-    """
-    A base model that reads additional settings from a file.
-    This helps making the CLI more flexible and allow composability via file.
-    """
-
-    def __init__(self, _source: Path, _source_cls: ArgdanticSource, **data) -> None:
-        if _source is not None:
-            reader = _source_cls(self, _source)
-            extra_data = reader()
-            extra_data.update(data)
-            data = extra_data
-        super().__init__(**data)
-
-
 class FileSettingsSource(ABC):
     """
     A file settings source is a callable object that takes an input file path
@@ -47,8 +32,23 @@ class FileSettingsSource(ABC):
         self.path = Path(path)
 
     @abstractmethod
-    def __call__(self, settings: BaseSettings) -> Dict[str, Any]:
+    def __call__(self, settings: BaseModel) -> Dict[str, Any]:
         raise NotImplementedError  # pragma: no cover
+
+
+class SourceBaseModel(BaseModel):
+    """
+    A base model that reads additional settings from a file.
+    This helps making the CLI more flexible and allow composability via file.
+    """
+
+    def __init__(self, _source: Path, _source_cls: Type[FileSettingsSource], **data) -> None:
+        if _source is not None:
+            reader = _source_cls(self, _source)
+            extra_data = reader()
+            extra_data.update(data)
+            data = extra_data
+        super().__init__(**data)
 
 
 class PydanticMultiEnvSource(PydanticEnvSource):
@@ -59,7 +59,7 @@ class PydanticMultiEnvSource(PydanticEnvSource):
 
     def _load_env_vars(self) -> Mapping[str, Union[str, None]]:
         if self.case_sensitive:
-            env_vars = os.environ
+            env_vars = cast(Dict[str, str], os.environ)
         else:
             self.env_prefix = self.env_prefix.lower()
             env_vars = {k.lower(): v for k, v in os.environ.items()}
@@ -71,7 +71,7 @@ class PydanticMultiEnvSource(PydanticEnvSource):
             if expected in env_vars:
                 valid_vars[expected] = env_vars[expected]
         add_vars = super()._load_env_vars()
-        valid_vars.update(add_vars)
+        valid_vars.update(cast(dict, add_vars))
         return valid_vars
 
 

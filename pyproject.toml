@@ -5,13 +5,14 @@ requires = ["flit_core >=3.2,<4"]
 [project]
 authors = [{ name = "Edoardo Arnaudo", email = "edoardo.arn@gmail.com" }]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Topic :: Software Development",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
   "Intended Audience :: Information Technology",
   "Intended Audience :: Science/Research",
@@ -39,9 +40,7 @@ all = [
   "tomli-w >= 1.0.0, < 2.0",
 ]
 dev = [
-  "black >= 23.9.0, < 24.0",
-  "flake8 >= 6.1.0, < 7.0",
-  "isort >= 5.10.0, < 6.0",
+  "ruff >= 0.5.6, < 1.0",
 ]
 docs = [
   "mkdocs >= 1.5.0, < 2.0",
@@ -68,18 +67,6 @@ toml = [
 yaml = [
   "pyyaml >= 6.0.0, < 7.0"
 ]
-
-[tool.black]
-line-length = 120
-
-[tool.isort]
-profile = "black"
-py_version = 39
-src_paths = ["argdantic", "tests"]
-
-[tool.flake8]
-ignore = ["E741"]
-max-line-length = 120
 
 [tool.ruff]
 line-length = 120
