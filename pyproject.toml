@@ -35,11 +35,13 @@ Home = "https://github.com/edornd"
 all = [
   "python-dotenv >= 1.0.0, < 2.0",
   "orjson >= 3.10.0, < 4.0",
+  "toml >= 0.10.0, < 1.0",
   "tomli >= 2.0, < 3.0",
   "pyyaml >= 6.0.0, < 7.0",
   "tomli-w >= 1.0.0, < 2.0",
 ]
 dev = [
+  "flit >= 3.9.0, < 4.0",
   "ruff >= 0.5.6, < 1.0",
 ]
 docs = [
@@ -61,6 +63,7 @@ test = [
   "pytest-xdist >= 3.6.0, < 4.0",
 ]
 toml = [
+  "toml >= 0.10.0, < 1.0",
   "tomli >= 2.0, < 3.0",
   "tomli-w >= 1.0.0, < 2.0",
 ]
