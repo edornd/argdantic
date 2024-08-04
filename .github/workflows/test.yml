@@ -27,7 +27,7 @@ jobs:
       - name: Install Flit
         run: pip install flit
       - name: Install Dependencies
-        run: python -m flit install --symlink
+        run: pip install -e ".[all,dev,test,docs]"
       - name: Lint code
         run: |
           ruff check .
