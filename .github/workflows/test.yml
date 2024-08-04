@@ -29,8 +29,11 @@ jobs:
       - name: Install Dependencies
         run: python -m flit install --symlink
       - name: Lint code
-        run: make lint
+        run: |
+          ruff check .
+          ruff format --check .
       - name: Test code
-        run: make test
+        run: |
+          pytest --cov=argdantic --cov-report=xml
       - name: Upload coverage
         uses: codecov/codecov-action@v2
