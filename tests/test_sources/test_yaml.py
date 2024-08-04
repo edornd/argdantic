@@ -5,7 +5,7 @@ import mock
 import pytest
 from pydantic_settings import BaseSettings
 
-from argdantic.sources.base import FileSettingsSource
+from argdantic.sources.base import FileSettingsSourceBuilder
 from argdantic.testing import CLIRunner
 
 
@@ -29,7 +29,7 @@ def test_yaml_import_error(tmp_path: Path) -> None:
     with mock.patch.dict("sys.modules", {"yaml": None}):
         source_spawner = YamlSettingsSource(path)
         assert repr(source_spawner) == f"<YamlSettingsSource path={path}>"
-        assert isinstance(source_spawner, FileSettingsSource)
+        assert isinstance(source_spawner, FileSettingsSourceBuilder)
         with pytest.raises(ImportError):
             source_spawner(TestConfig)()
 
@@ -40,7 +40,7 @@ def test_yaml_source(tmp_path: Path) -> None:
     path = create_yaml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.yaml")
     source = YamlSettingsSource(path)
     assert repr(source) == f"<YamlSettingsSource path={path}>"
-    assert isinstance(source, FileSettingsSource)
+    assert isinstance(source, FileSettingsSourceBuilder)
     assert source(TestConfig)() == {"foo": "baz", "bar": 42}
 
 

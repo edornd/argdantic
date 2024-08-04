@@ -45,7 +45,6 @@ def test_toml_store_call(tmp_path: Path) -> None:
     # read data, remove trailing newline and trailing whitespace
     data = path.read_text().strip().replace("\n", " ")
     assert data == 'foo = "baz" bar = 42'
-    assert data == 'foo = "baz" bar = 42'
 
 
 def test_parser_using_toml_store(tmp_path: Path, runner: CLIRunner) -> None:

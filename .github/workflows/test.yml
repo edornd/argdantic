@@ -19,18 +19,22 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
       - name: Install Flit
         run: pip install flit
       - name: Install Dependencies
-        run: python -m flit install --symlink
-      - name: Lint with flake8
-        run: bash tools/lint.sh
-      - name: Test with pytest
-        run: bash tools/test.sh
+        run: pip install -e ".[all,dev,test]"
+      - name: Lint code
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Test code
+        run: |
+          pytest --cov=argdantic --cov-report=xml
       - name: Upload coverage
         uses: codecov/codecov-action@v2
