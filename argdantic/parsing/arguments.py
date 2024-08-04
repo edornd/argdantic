@@ -15,6 +15,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    cast,
     get_args,
     get_origin,
 )
@@ -155,13 +156,13 @@ class FlagArgument(Argument):
         group.add_argument(
             *self.field_names,
             dest=self.identifier,
-            action=tracker_true,
+            action=cast(Type[Action], tracker_true),
             help=self.description,
         )  # type: ignore
         group.add_argument(
             *negative_field_names,
             dest=self.identifier,
-            action=tracker_false,
+            action=cast(Type[Action], tracker_false),
         )  # type: ignore
         default = self.default if self.default is not None else False
         parser.set_defaults(**{self.identifier: default})

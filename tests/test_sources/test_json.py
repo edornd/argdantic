@@ -6,7 +6,7 @@ import mock
 from pydantic_settings import BaseSettings
 from pytest import CaptureFixture
 
-from argdantic.sources.base import FileSettingsSource
+from argdantic.sources.base import FileSettingsSourceBuilder
 from argdantic.testing import CLIRunner
 
 
@@ -27,7 +27,7 @@ def test_json_no_import_error(tmp_path: Path) -> None:
     with mock.patch.dict("sys.modules", {"orjson": None}):
         path = create_json_file({"foo": "baz", "bar": 42}, tmp_path / "settings.json")
         source_spawner = JsonSettingsSource(path)
-        assert isinstance(source_spawner, FileSettingsSource)
+        assert isinstance(source_spawner, FileSettingsSourceBuilder)
         assert source_spawner(TestConfig)() == {"foo": "baz", "bar": 42}
         assert repr(source_spawner) == f"<JsonSettingsSource path={path}>"
 
@@ -37,7 +37,7 @@ def test_json_source(tmp_path: Path) -> None:
 
     path = create_json_file({"foo": "baz", "bar": 42}, tmp_path / "settings.json")
     source_spawner = JsonSettingsSource(path)
-    assert isinstance(source_spawner, FileSettingsSource)
+    assert isinstance(source_spawner, FileSettingsSourceBuilder)
     assert source_spawner(TestConfig)() == {"foo": "baz", "bar": 42}
     assert repr(source_spawner) == f"<JsonSettingsSource path={path}>"
 

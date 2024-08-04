@@ -1,19 +1,18 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Type, Union, cast
+from typing import Dict, Mapping, Optional, Type, Union, cast
 
-from pydantic import BaseModel
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from pydantic_settings.sources import DotEnvSettingsSource as PydanticEnvSource
 from pydantic_settings.sources import DotenvType
 from pydantic_settings.sources import SecretsSettingsSource as PydanticSecretsSource
 
 
-class ArgdanticSource(ABC):
+class SettingsSourceBuilder(ABC):
     """
     An argdantic source is a callable object that takes an input settings object
-    and returns a dictionary of settings that can be passed to an argument parser.
+    and returns an actual source, required to postpone the init of default sources.
     """
 
     @abstractmethod
@@ -21,30 +20,36 @@ class ArgdanticSource(ABC):
         raise NotImplementedError  # pragma: no cover
 
 
-class FileSettingsSource(ABC):
+class FileSettingsSourceBuilder(SettingsSourceBuilder):
     """
-    A file settings source is a callable object that takes an input file path
-    to read settings from, and returns a dictionary of settings that can be
-    passed to a pydantic model.
+    A file source builder is a callable object that takes an input file path
+    to read settings from, and returns an instance of settings source that
+    can be used to populate to a pydantic model.
     """
 
     def __init__(self, path: Union[str, Path]) -> None:
         self.path = Path(path)
 
-    @abstractmethod
-    def __call__(self, settings: BaseModel) -> Dict[str, Any]:
-        raise NotImplementedError  # pragma: no cover
+
+class FileBaseSettingsSource(PydanticBaseSettingsSource):
+    """
+    Abstract settings source that expects an extra path, together with the settings class.
+    """
+
+    def __init__(self, settings_cls: Type[BaseSettings], path: Union[str, Path]) -> None:
+        super().__init__(settings_cls)
+        self.path = Path(path)
 
 
-class SourceBaseModel(BaseModel):
+class SourceBaseModel(BaseSettings):
     """
     A base model that reads additional settings from a file.
     This helps making the CLI more flexible and allow composability via file.
     """
 
-    def __init__(self, _source: Path, _source_cls: Type[FileSettingsSource], **data) -> None:
+    def __init__(self, _source: Path, _source_cls: Type[FileBaseSettingsSource], **data) -> None:
         if _source is not None:
-            reader = _source_cls(self, _source)
+            reader = _source_cls(self, _source)  # type: ignore
             extra_data = reader()
             extra_data.update(data)
             data = extra_data
@@ -61,7 +66,7 @@ class PydanticMultiEnvSource(PydanticEnvSource):
         if self.case_sensitive:
             env_vars = cast(Dict[str, str], os.environ)
         else:
-            self.env_prefix = self.env_prefix.lower()
+            self.env_prefix: str = self.env_prefix.lower()
             env_vars = {k.lower(): v for k, v in os.environ.items()}
         # filter out env vars that are not fields in the settings class
         valid_vars = {}
@@ -75,7 +80,7 @@ class PydanticMultiEnvSource(PydanticEnvSource):
         return valid_vars
 
 
-class EnvSettingsSource(ArgdanticSource):
+class EnvSettingsSource(SettingsSourceBuilder):
     """
     Reads settings from environment variables.
     This class inherits from the pydantic EnvSettingsSource class to fully customize input sources.
@@ -106,7 +111,7 @@ class EnvSettingsSource(ArgdanticSource):
         )
 
 
-class SecretsSettingsSource(ArgdanticSource):
+class SecretsSettingsSource(SettingsSourceBuilder):
     """Reads secrets from the given directory.
     This class inherits from the pydantic SecretsSettingsSource class to fully customize input sources.
     """

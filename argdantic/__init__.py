@@ -2,9 +2,10 @@
 
 from argdantic.core import ArgParser
 from argdantic.fields import ArgField
+from argdantic.version import __version__
 
-__version__ = "1.2.0"
 __all__ = [
+    "__version__",
     "ArgParser",
     "ArgField",
 ]

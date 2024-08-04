@@ -5,7 +5,7 @@ import mock
 import pytest
 from pydantic_settings import BaseSettings
 
-from argdantic.sources.base import FileSettingsSource
+from argdantic.sources.base import FileSettingsSourceBuilder
 from argdantic.testing import CLIRunner
 
 
@@ -29,7 +29,7 @@ def test_toml_import_error(tmp_path: Path) -> None:
         path = create_toml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.toml")
         source_spawner = TomlSettingsSource(path)
         assert repr(source_spawner) == f"<TomlSettingsSource path={path}>"
-        assert isinstance(source_spawner, FileSettingsSource)
+        assert isinstance(source_spawner, FileSettingsSourceBuilder)
         with pytest.raises(ImportError):
             source_spawner(TestConfig)()
 
@@ -40,7 +40,7 @@ def test_toml_source(tmp_path: Path) -> None:
     path = create_toml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.toml")
     source_spawner = TomlSettingsSource(path)
     assert repr(source_spawner) == f"<TomlSettingsSource path={path}>"
-    assert isinstance(source_spawner, FileSettingsSource)
+    assert isinstance(source_spawner, FileSettingsSourceBuilder)
     assert source_spawner(TestConfig)() == {"foo": "baz", "bar": 42}
 
 

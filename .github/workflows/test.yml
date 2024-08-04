@@ -28,9 +28,9 @@ jobs:
         run: pip install flit
       - name: Install Dependencies
         run: python -m flit install --symlink
-      - name: Lint with flake8
-        run: bash tools/lint.sh
-      - name: Test with pytest
-        run: bash tools/test.sh
+      - name: Lint code
+        run: make lint
+      - name: Test code
+        run: make test
       - name: Upload coverage
         uses: codecov/codecov-action@v2
