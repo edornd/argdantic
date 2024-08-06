@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Optional, Tuple, Type, cast
+from typing import Any, Dict, Optional, Tuple, Type, cast
 
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings, InitSettingsSource, PydanticBaseSettingsSource
@@ -16,9 +16,9 @@ class DynamicFileSource(PydanticBaseSettingsSource):
 
     def __init__(
         self,
-        settings_cls: type[BaseSettings],
-        source_cls: type[FileBaseSettingsSource],
-        init_kwargs: dict[str, Any],
+        settings_cls: Type[BaseSettings],
+        source_cls: Type[FileBaseSettingsSource],
+        init_kwargs: Dict[str, Any],
         required: bool,
         field_name: Optional[str] = None,
     ):
@@ -32,11 +32,11 @@ class DynamicFileSource(PydanticBaseSettingsSource):
         else:
             self.source = source_cls(settings_cls, init_kwargs[self.field_name])
 
-    def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
+    def get_field_value(self, field: Any, field_name: str) -> Tuple[Any, str, bool]:
         # Nothing to do here. Only implement the return statement to make mypy happy
         return None, "", False  # pragma: no cover
 
-    def __call__(self) -> dict[str, Any]:
+    def __call__(self) -> Dict[str, Any]:
         if self.source is not None:
             main_kwargs = self.source()
             main_kwargs.update(self.init_kwargs)

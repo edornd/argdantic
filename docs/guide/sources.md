@@ -1,4 +1,4 @@
-# Input Sources
+# Static Sources
 
 `argdantic` allows you to define the arguments of your CLI in a variety of ways, including:
 
@@ -37,11 +37,11 @@ $ python sources.py
     to define CLI arguments that may be set via file.
     **Use default values or `None` as a workaround.**
 
-## Sourced Models
+## Dynamic Sources
 
-Reading the full configuration may not be your cup of tea.
-Sometimes you may want to define a model with its own fields, configurable from CLI, while also being able to read its configuration
-from a file or environment variables.
+Reading or writing a full configuration from scratch may not be your cup of tea.
+Sometimes you may want to define a model with its own fields, reading its configuration
+from a file, while still being able to override some of its fields from the command line.
 
 Imagine you have a model like this:
 
@@ -54,37 +54,39 @@ class Fruit(BaseModel):
     price: float
 ```
 
-The CLI may define a `--fruit` argument to point to a file with the `Fruit` model, as well as a `--fruit.name` argument,  or `--fruit.color` argument, etc.
+The CLI may define a `--fruit` argument to point to a file with the content of a `Fruit` instance, as well as a `--fruit.name` argument,  or `--fruit.color` argument, etc.
 
-You can do that with ad-hoc models, named `YamlModel`, `JsonModel`, and `TomlModel`.
+In argdantic, you can do that with the `from_file` annotation.
 
-```python  title="models.py" linenums="1" hl_lines="2 5 11"
-{!examples/sources/models.py!}
+```python  title="dynamic.py" linenums="1" hl_lines="4 7 14"
+{!examples/sources/dynamic.py!}
 ```
+
+without additional configuration, the `from_file` decorator will automatically add an extra argument, equal to the name of the field, to the command line interface, in this case `--dataset` and `--optim`:
 
 This will enable two extra arguments, namely `--dataset` and `--optim:
 
-```console
-$ python models.py --help
->usage: models.py [-h] [--dataset.name TEXT] [--dataset.batch-size INT] [--dataset.tile-size INT] [--dataset.shuffle | --no-dataset.shuffle] --dataset PATH
->                 [--optim.name TEXT] [--optim.learning-rate FLOAT] [--optim.momentum FLOAT] --optim PATH
+```diff
+$ python dynamic.py --help
+> usage: models.py [-h] [--dataset.name TEXT] [--dataset.batch-size INT] [--dataset.tile-size INT] [--dataset.shuffle | --no-dataset.shuffle] --dataset PATH
+>                  [--optim.name TEXT] [--optim.learning-rate FLOAT] [--optim.momentum FLOAT] --optim PATH
 >
->options:
->  -h, --help            show this help message and exit
->  --dataset.name TEXT   (default: CIFAR10)
->  --dataset.batch-size INT
->                        (default: 32)
->  --dataset.tile-size INT
->                        (default: 256)
->  --dataset.shuffle     (default: True)
->  --no-dataset.shuffle
->  --dataset PATH        (required)
->  --optim.name TEXT     (default: SGD)
->  --optim.learning-rate FLOAT
->                        (default: 0.01)
->  --optim.momentum FLOAT
->                        (default: 0.9)
->  --optim PATH          (required)
+> options:
+>   -h, --help            show this help message and exit
+>   --dataset.name TEXT   (default: CIFAR10)
+>   --dataset.batch-size INT
+>                         (default: 32)
+>   --dataset.tile-size INT
+>                         (default: 256)
+>   --dataset.shuffle     (default: True)
+>   --no-dataset.shuffle
++>   --dataset PATH        (required)
+>   --optim.name TEXT     (default: SGD)
+>   --optim.learning-rate FLOAT
+>                         (default: 0.01)
+>   --optim.momentum FLOAT
+>                         (default: 0.9)
++>   --optim PATH          (required)
 ```
 
 Invoking the command with the `--dataset` and `--optim` arguments will read the configuration from the files, which are defined as follows:
@@ -98,11 +100,37 @@ Invoking the command with the `--dataset` and `--optim` arguments will read the 
 ```
 
 ```console
-$ python models.py --dataset resources/dataset.yml --optim resources/optim.yml
+$ python dynamic.py --dataset resources/dataset.yml --optim resources/optim.yml
 > name='coco' batch_size=32 tile_size=512 shuffle=True
 > name='adam' learning_rate=0.001 momentum=0.9
 ```
 
-!!! warning
+### Customizing the `from_file` behavior
 
-    `YamlModel`, `JsonModel`, and `TomlModel` are still experimental, and the API may change in the future.
+The `from_file` decorator has a few options that can be used to customize its behavior:
+
+- `required`: If `True`, the file path is required. If `False`, the file path is optional. Defaults to `True`.
+
+- `loader`: A function that takes as input the model class itself, and the file path, and returns an instance of the model. `argdantic` provides three built-in loaders:
+    - `JsonFileLoader`
+    - `YamlFileLoader`
+    - `TomlFileLoader`
+
+- `use_field`: When specified, the model field indicated by the string will be used as the file path to look for the configuration.
+In this case, the extra argument will not be added to the command line interface, and the file path is naturally provided by the pydantic model itself. It may be useful when the file path is needed later on.
+
+Here's an example providing both the `required` and `use_field` options:
+
+```python  title="dynamic_custom.py" linenums="1" hl_lines="4 7 14"
+{!examples/sources/dynamic_custom.py!}
+```
+
+Specifying the following command will read the configuration from the optim instance only:
+
+```diff
++$ python dynamic_custom.py --optim.path resources/optim.yml
+> name='CIFAR10' batch_size=32 tile_size=256 shuffle=True
+> path=PosixPath('resources/optim.yml') name='adam' learning_rate=0.001 momentum=0.9
+```
+
+Notice that the path this time is provided using a standard field, but the loader automatically reads the configuration from the specified file.

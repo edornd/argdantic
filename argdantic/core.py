@@ -1,6 +1,6 @@
 import inspect
 from argparse import ArgumentParser, Namespace, _SubParsersAction
-from typing import Any, Callable, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, cast, get_type_hints
+from typing import Any, Callable, Dict, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, cast, get_type_hints
 
 from pydantic import BaseModel, ValidationError, create_model
 from pydantic.v1.utils import lenient_issubclass
@@ -43,7 +43,7 @@ class Command:
         self.delimiter = delimiter
         self.arguments = arguments or []
         self.stores = stores or []
-        self.trackers: dict[str, ActionTracker] = {}
+        self.trackers: Dict[str, ActionTracker] = {}
 
     def __repr__(self) -> str:
         return f"<Command {self.name}>"
@@ -110,7 +110,7 @@ class ArgParser(Generic[ParserType]):
         internal_delimiter: str = "__",
         subcommand_meta: str = "<command>",
     ) -> None:
-        self.entrypoint: ArgumentParser | None = None
+        self.entrypoint: Optional[ArgumentParser] = None
         self.name = name
         self.description = description
         self.force_group = force_group
@@ -125,7 +125,7 @@ class ArgParser(Generic[ParserType]):
         self._subcommand_meta = subcommand_meta
         # keeping a reference to subparser is necessary to add subparsers
         # Each cli level can only have one subparser.
-        self._subparser: _SubParsersAction | None = None
+        self._subparser: Optional[_SubParsersAction] = None
 
     def __repr__(self) -> str:
         name = f" '{self.name}'" if self.name else ""

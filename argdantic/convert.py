@@ -64,7 +64,7 @@ def argument_from_field(
     assert not lenient_issubclass(field_info.annotation, BaseModel)
     base_option_name = delimiter.join(parent_path + (kebab_name,))
     full_option_name = f"--{base_option_name}"
-    extra_fields: dict[str, Any] = (
+    extra_fields: Dict[str, Any] = (
         field_info.json_schema_extra or {} if isinstance(field_info.json_schema_extra, dict) else {}
     )
     extra_names = extra_fields.get("names", ())

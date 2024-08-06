@@ -1,12 +1,12 @@
 from collections.abc import MutableMapping
-from typing import Any, Iterator, Type, Union, get_origin
+from typing import Any, Dict, Iterator, Type, Union, get_origin
 
 
 class Registry(MutableMapping):
     """Simple class registry for mapping types and their argument handlers."""
 
     def __init__(self) -> None:
-        self.store: dict[type, Any] = dict()
+        self.store: Dict[type, Any] = dict()
 
     def __getitem__(self, key: type) -> Any:
         # do not allow Union types (unless they are Optional, handled in conversion)
