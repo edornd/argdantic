@@ -1,13 +1,17 @@
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict
 
 import mock
-from pydantic_settings import BaseSettings
+import pytest
+from pydantic import BaseModel
 from pytest import CaptureFixture
 
 from argdantic.sources.base import FileSettingsSourceBuilder
 from argdantic.testing import CLIRunner
+
+LOG = logging.getLogger(__name__)
 
 
 def create_json_file(data: Dict[str, Any], path: Path) -> Path:
@@ -15,7 +19,7 @@ def create_json_file(data: Dict[str, Any], path: Path) -> Path:
     return path
 
 
-class TestConfig(BaseSettings):
+class TestConfig(BaseModel):
     __test__ = False
     foo: str
     bar: int
@@ -58,14 +62,113 @@ def test_parser_using_json_source(tmp_path: Path, runner: CLIRunner) -> None:
     assert result.return_value == ("baz", 42)
 
 
-def test_json_sourced_model(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
+def test_dynamic_source_validations(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
+    from argdantic.sources import JsonFileLoader, from_file
+
+    # non pydantic model
+    with pytest.raises(TypeError):
+
+        @from_file(loader=JsonFileLoader, required=False)
+        class TestModel:
+            foo: str = "default"
+            bar: int = 0
+
+    # specified field not in given
+    with pytest.raises(ValueError):
+
+        @from_file(loader=JsonFileLoader, required=False, use_field="baz")
+        class TestModel(BaseModel):
+            foo: str = "default"
+            bar: int = 0
+
+    # specified field not a string or Path
+    with pytest.raises(ValueError):
+
+        @from_file(loader=JsonFileLoader, required=False, use_field="bar")
+        class TestModel(BaseModel):
+            foo: str = "default"
+            bar: int = 0
+
+
+def test_dynamic_source_repr(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
+    from pydantic_settings.sources import InitSettingsSource
+
     from argdantic import ArgParser
-    from argdantic.sources import JsonModel
+    from argdantic.sources import JsonFileLoader, from_file
+
+    parser = ArgParser()
+
+    @from_file(loader=JsonFileLoader, required=False)
+    class TestModel(BaseModel):
+        foo: str = "default"
+        bar: int = 0
+
+    @parser.command()
+    def main(model: TestModel) -> None:
+        return model.model_dump()
+
+    sources = TestModel.settings_customise_sources(
+        settings_cls=TestModel,
+        init_settings=InitSettingsSource(settings_cls=TestModel, init_kwargs={"foo": "baz", "bar": 42}),
+        env_settings=None,
+        dotenv_settings=None,
+        file_secret_settings=None,
+    )
+    assert str(sources[0]) == "DynamicFileSource(source=None)"
+
+
+def test_dynamic_source_required_raises(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
+    from pydantic_settings.sources import InitSettingsSource
+
+    from argdantic.sources import JsonFileLoader, from_file
+
+    with pytest.raises(ValueError):
+
+        @from_file(loader=JsonFileLoader, required=True)
+        class TestModel(BaseModel):
+            foo: str = "default"
+            bar: int = 0
+
+        TestModel.settings_customise_sources(
+            settings_cls=TestModel,
+            init_settings=InitSettingsSource(settings_cls=TestModel, init_kwargs={"foo": "baz", "bar": 42}),
+            env_settings=None,
+            dotenv_settings=None,
+            file_secret_settings=None,
+        )
+
+
+def test_dynamic_json_source_non_required(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
+    from argdantic import ArgParser
+    from argdantic.sources import JsonFileLoader, from_file
+
+    parser = ArgParser()
+
+    @from_file(loader=JsonFileLoader, required=False)
+    class TestModel(BaseModel):
+        foo: str = "default"
+        bar: int = 0
+
+    @parser.command()
+    def main(model: TestModel = TestModel()) -> None:
+        return model.model_dump()
+
+    # check if the cli requires the model argument
+    result = runner.invoke(parser, [])
+
+    assert result.exception is None
+    assert result.return_value == {"foo": "default", "bar": 0}
+
+
+def test_dynamic_json_source(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
+    from argdantic import ArgParser
+    from argdantic.sources import JsonFileLoader, from_file
 
     path = create_json_file({"foo": "baz", "bar": 42}, tmp_path / "settings.json")
     parser = ArgParser()
 
-    class TestModel(JsonModel):
+    @from_file(loader=JsonFileLoader)
+    class TestModel(BaseModel):
         foo: str = "default"
         bar: int = 0
 

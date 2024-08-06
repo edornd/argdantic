@@ -8,8 +8,8 @@ from pydantic.v1.utils import lenient_issubclass
 from pydantic_core import PydanticUndefined
 
 from argdantic.parsing import ActionTracker, Argument, PrimitiveArgument, registry
-from argdantic.sources.base import SourceBaseModel
-from argdantic.utils import is_optional
+from argdantic.sources import DEFAULT_SOURCE_FIELD
+from argdantic.utils import get_optional_type, is_optional
 
 
 def format_description(description: Optional[str], has_default: bool, is_required: bool) -> str:
@@ -64,7 +64,7 @@ def argument_from_field(
     assert not lenient_issubclass(field_info.annotation, BaseModel)
     base_option_name = delimiter.join(parent_path + (kebab_name,))
     full_option_name = f"--{base_option_name}"
-    extra_fields: dict[str, Any] = (
+    extra_fields: Dict[str, Any] = (
         field_info.json_schema_extra or {} if isinstance(field_info.json_schema_extra, dict) else {}
     )
     extra_names = extra_fields.get("names", ())
@@ -114,27 +114,34 @@ def model_to_args(
         # checks on delimiters to be done
         kebab_name = field_name.replace("_", "-")
         assert internal_delimiter not in kebab_name
-        if lenient_issubclass(field_info.annotation, BaseModel):
+
+        annotation = (
+            field_info.annotation
+            if not is_optional(field_info.annotation)
+            else get_optional_type(field_info.annotation)
+        )
+        if lenient_issubclass(annotation, BaseModel):
             yield from model_to_args(
-                cast(Type[BaseModel], field_info.annotation),
+                cast(Type[BaseModel], annotation),
                 delimiter,
                 internal_delimiter,
                 parent_path=parent_path + (kebab_name,),
             )
             # if the model requires a file source, we add an extra argument
-            # whose name is the same as the model's name
-            if lenient_issubclass(field_info.annotation, SourceBaseModel):
+            # whose name is the same as the model's name (yes I'm not gonna bother with mypy here)
+            if hasattr(annotation, "__arg_source_field__") and annotation.__arg_source_field__ is None:  # type: ignore
+                default = PydanticUndefined if annotation.__arg_source_required__ else None  # type: ignore
                 info = FieldInfo(
                     annotation=Path,
                     alias=field_info.alias,
                     title=field_info.title,
                     description=field_info.description,
-                    default=field_info.default,
+                    default=default,
                     json_schema_extra=field_info.json_schema_extra,
                 )
                 base_name = delimiter.join(parent_path + (kebab_name,))
                 internal_name = base_name.replace(delimiter, internal_delimiter).replace("-", "_")
-                custom_identifier = f"{internal_name}{internal_delimiter}_source"
+                custom_identifier = f"{internal_name}{internal_delimiter}{DEFAULT_SOURCE_FIELD}"
                 yield argument_from_field(
                     field_info=info,
                     kebab_name=kebab_name,

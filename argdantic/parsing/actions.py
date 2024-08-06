@@ -1,18 +1,5 @@
-from argparse import OPTIONAL, Action, ArgumentParser, Namespace
+from argparse import OPTIONAL, Action, ArgumentParser, Namespace, _copy_items  # type: ignore
 from typing import Any, Iterable, Optional, Sequence, Union
-
-
-def _copy_items(items):
-    if items is None:
-        return []
-    # The copy module is used only in the 'append' and 'append_const'
-    # actions, and it is needed only when the default value isn't a list.
-    # Delay its import for speeding up the common case.
-    if type(items) is list:
-        return items[:]
-    import copy
-
-    return copy.copy(items)
 
 
 class StoreAction(Action):

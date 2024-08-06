@@ -41,21 +41,6 @@ class FileBaseSettingsSource(PydanticBaseSettingsSource):
         self.path = Path(path)
 
 
-class SourceBaseModel(BaseSettings):
-    """
-    A base model that reads additional settings from a file.
-    This helps making the CLI more flexible and allow composability via file.
-    """
-
-    def __init__(self, _source: Path, _source_cls: Type[FileBaseSettingsSource], **data) -> None:
-        if _source is not None:
-            reader = _source_cls(self, _source)  # type: ignore
-            extra_data = reader()
-            extra_data.update(data)
-            data = extra_data
-        super().__init__(**data)
-
-
 class PydanticMultiEnvSource(PydanticEnvSource):
     """
     A pydantic settings source that loads settings from multiple environment sources.

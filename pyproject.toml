@@ -76,6 +76,7 @@ line-length = 120
 
 [tool.mypy]
 modules = "argdantic"
+exclude = ["tests"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --capture=sys"

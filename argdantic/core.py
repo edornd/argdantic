@@ -1,6 +1,6 @@
 import inspect
 from argparse import ArgumentParser, Namespace, _SubParsersAction
-from typing import Any, Callable, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, cast, get_type_hints
+from typing import Any, Callable, Dict, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, cast, get_type_hints
 
 from pydantic import BaseModel, ValidationError, create_model
 from pydantic.v1.utils import lenient_issubclass
@@ -43,7 +43,7 @@ class Command:
         self.delimiter = delimiter
         self.arguments = arguments or []
         self.stores = stores or []
-        self.trackers: dict[str, ActionTracker] = {}
+        self.trackers: Dict[str, ActionTracker] = {}
 
     def __repr__(self) -> str:
         return f"<Command {self.name}>"
@@ -110,7 +110,7 @@ class ArgParser(Generic[ParserType]):
         internal_delimiter: str = "__",
         subcommand_meta: str = "<command>",
     ) -> None:
-        self.entrypoint: ArgumentParser | None = None
+        self.entrypoint: Optional[ArgumentParser] = None
         self.name = name
         self.description = description
         self.force_group = force_group
@@ -125,7 +125,7 @@ class ArgParser(Generic[ParserType]):
         self._subcommand_meta = subcommand_meta
         # keeping a reference to subparser is necessary to add subparsers
         # Each cli level can only have one subparser.
-        self._subparser: _SubParsersAction | None = None
+        self._subparser: Optional[_SubParsersAction] = None
 
     def __repr__(self) -> str:
         name = f" '{self.name}'" if self.name else ""
@@ -287,7 +287,7 @@ class ArgParser(Generic[ParserType]):
             # set the base Model and Config class
             if sources:
 
-                class SourceSettings(BaseSettings):
+                class StaticSourceSettings(BaseSettings):
                     # patch the config class so that pydantic functionality remains
                     # the same, but the sources are properly initialized
 
@@ -304,12 +304,11 @@ class ArgParser(Generic[ParserType]):
                         # this is needed to make sure that the config class is properly
                         # initialized with the sources declared by the user on CLI init.
                         # Env and file sources are discarded, the user must provide them explicitly.
-                        if sources is not None:
-                            callables = [source(settings_cls) for source in sources]
-                            return (*callables, init_settings)
-                        return (init_settings,)
+                        source_list = cast(List[SettingSourceCallable], sources)
+                        callables = [source(settings_cls) for source in source_list]
+                        return (*callables, init_settings)
 
-                model_class = SourceSettings if model_class is None else (model_class, SourceSettings)
+                model_class = StaticSourceSettings if model_class is None else (model_class, StaticSourceSettings)
 
             cfg_class = create_model(  # type: ignore
                 "WrapperModel",

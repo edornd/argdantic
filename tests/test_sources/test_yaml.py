@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 import mock
 import pytest
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel
 
 from argdantic.sources.base import FileSettingsSourceBuilder
 from argdantic.testing import CLIRunner
@@ -16,7 +16,7 @@ def create_yaml_file(data: Dict[str, Any], path: Path) -> Path:
     return path
 
 
-class TestConfig(BaseSettings):
+class TestConfig(BaseModel):
     __test__ = False
     foo: str
     bar: int
@@ -60,14 +60,15 @@ def test_parser_using_yaml_source(tmp_path: Path, runner: CLIRunner) -> None:
     assert result.return_value == ("baz", 42)
 
 
-def test_yaml_sourced_model(tmp_path: Path, runner: CLIRunner, capsys: pytest.CaptureFixture) -> None:
+def test_dynamic_yaml_source(tmp_path: Path, runner: CLIRunner, capsys: pytest.CaptureFixture) -> None:
     from argdantic import ArgParser
-    from argdantic.sources import YamlModel
+    from argdantic.sources import YamlFileLoader, from_file
 
     path = create_yaml_file({"foo": "baz", "bar": 42}, tmp_path / "settings.yaml")
     parser = ArgParser()
 
-    class TestModel(YamlModel):
+    @from_file(loader=YamlFileLoader)
+    class TestModel(BaseModel):
         foo: str = "default"
         bar: int = 0
 
