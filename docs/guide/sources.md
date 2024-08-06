@@ -1,4 +1,4 @@
-# Static Sources
+# CLI Sources
 
 `argdantic` allows you to define the arguments of your CLI in a variety of ways, including:
 
@@ -13,7 +13,11 @@ The priority of the input sources is given by the order in which they are define
 Of course, the command line arguments always have the highest priority, and they can be used to override any other input source.
 
 Since every command is virtually independent, **sources are part of the command definition**.
-This means that you can define different sources for different commands in the same CLI.
+This means that you can define different sources for different commands or models in the same CLI.
+
+## Static Sources
+
+The simplest kind of source is a static source, where the values are defined at the time of the command definition.
 
 For instance, the following example defines a single command with many different sources:
 
@@ -68,25 +72,25 @@ This will enable two extra arguments, namely `--dataset` and `--optim:
 
 ```diff
 $ python dynamic.py --help
-> usage: models.py [-h] [--dataset.name TEXT] [--dataset.batch-size INT] [--dataset.tile-size INT] [--dataset.shuffle | --no-dataset.shuffle] --dataset PATH
->                  [--optim.name TEXT] [--optim.learning-rate FLOAT] [--optim.momentum FLOAT] --optim PATH
->
-> options:
->   -h, --help            show this help message and exit
->   --dataset.name TEXT   (default: CIFAR10)
->   --dataset.batch-size INT
->                         (default: 32)
->   --dataset.tile-size INT
->                         (default: 256)
->   --dataset.shuffle     (default: True)
->   --no-dataset.shuffle
-+>   --dataset PATH        (required)
->   --optim.name TEXT     (default: SGD)
->   --optim.learning-rate FLOAT
->                         (default: 0.01)
->   --optim.momentum FLOAT
->                         (default: 0.9)
-+>   --optim PATH          (required)
+ usage: models.py [-h] [--dataset.name TEXT] [--dataset.batch-size INT] [--dataset.tile-size INT] [--dataset.shuffle | --no-dataset.shuffle] --dataset PATH
+                  [--optim.name TEXT] [--optim.learning-rate FLOAT] [--optim.momentum FLOAT] --optim PATH
+
+ options:
+   -h, --help            show this help message and exit
+   --dataset.name TEXT   (default: CIFAR10)
+   --dataset.batch-size INT
+                         (default: 32)
+   --dataset.tile-size INT
+                         (default: 256)
+   --dataset.shuffle     (default: True)
+   --no-dataset.shuffle
++   --dataset PATH        (required)
+   --optim.name TEXT     (default: SGD)
+   --optim.learning-rate FLOAT
+                         (default: 0.01)
+   --optim.momentum FLOAT
+                         (default: 0.9)
++   --optim PATH          (required)
 ```
 
 Invoking the command with the `--dataset` and `--optim` arguments will read the configuration from the files, which are defined as follows:
@@ -101,8 +105,8 @@ Invoking the command with the `--dataset` and `--optim` arguments will read the 
 
 ```console
 $ python dynamic.py --dataset resources/dataset.yml --optim resources/optim.yml
-> name='coco' batch_size=32 tile_size=512 shuffle=True
-> name='adam' learning_rate=0.001 momentum=0.9
+ name='coco' batch_size=32 tile_size=512 shuffle=True
+ name='adam' learning_rate=0.001 momentum=0.9
 ```
 
 ### Customizing the `from_file` behavior
@@ -121,7 +125,7 @@ In this case, the extra argument will not be added to the command line interface
 
 Here's an example providing both the `required` and `use_field` options:
 
-```python  title="dynamic_custom.py" linenums="1" hl_lines="4 7 14"
+```python  title="dynamic_custom.py" linenums="1" hl_lines="6 9 17"
 {!examples/sources/dynamic_custom.py!}
 ```
 
@@ -129,8 +133,8 @@ Specifying the following command will read the configuration from the optim inst
 
 ```diff
 +$ python dynamic_custom.py --optim.path resources/optim.yml
-> name='CIFAR10' batch_size=32 tile_size=256 shuffle=True
-> path=PosixPath('resources/optim.yml') name='adam' learning_rate=0.001 momentum=0.9
+name='CIFAR10' batch_size=32 tile_size=256 shuffle=True
+path=PosixPath('resources/optim.yml') name='adam' learning_rate=0.001 momentum=0.9
 ```
 
 Notice that the path this time is provided using a standard field, but the loader automatically reads the configuration from the specified file.
