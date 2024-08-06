@@ -99,3 +99,13 @@ def is_optional(field_type: Optional[Type[Any]]) -> bool:
         bool: true if the type is optional, false otherwise
     """
     return get_origin(field_type) is Union and type(None) in get_args(field_type)
+
+
+def get_optional_type(field_type: Optional[Type[Any]]) -> Type[Any]:
+    """Returns the type of the optional field.
+    Args:
+        field_type (type): pydantic field type
+    Returns:
+        Type[Any]: the type of the field
+    """
+    return get_args(field_type)[0]

@@ -287,7 +287,7 @@ class ArgParser(Generic[ParserType]):
             # set the base Model and Config class
             if sources:
 
-                class SourceSettings(BaseSettings):
+                class StaticSourceSettings(BaseSettings):
                     # patch the config class so that pydantic functionality remains
                     # the same, but the sources are properly initialized
 
@@ -304,12 +304,11 @@ class ArgParser(Generic[ParserType]):
                         # this is needed to make sure that the config class is properly
                         # initialized with the sources declared by the user on CLI init.
                         # Env and file sources are discarded, the user must provide them explicitly.
-                        if sources is not None:
-                            callables = [source(settings_cls) for source in sources]
-                            return (*callables, init_settings)
-                        return (init_settings,)
+                        source_list = cast(List[SettingSourceCallable], sources)
+                        callables = [source(settings_cls) for source in source_list]
+                        return (*callables, init_settings)
 
-                model_class = SourceSettings if model_class is None else (model_class, SourceSettings)
+                model_class = StaticSourceSettings if model_class is None else (model_class, StaticSourceSettings)
 
             cfg_class = create_model(  # type: ignore
                 "WrapperModel",

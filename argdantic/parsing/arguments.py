@@ -107,7 +107,7 @@ class Argument(ABC):
 
     @abstractmethod
     def build(self, parser: ArgumentParser) -> ActionTracker:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def build_internal(self, parser: ArgumentParser, *, action: Type[Action], **optional_fields: Any) -> ActionTracker:
         tracker = ActionTracker(action)
