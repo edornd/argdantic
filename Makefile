@@ -51,11 +51,11 @@ clean:            ## Clean unused files.
 release:          ## Create a new tag for release.
 	@echo "WARNING: This operation will create s version tag and push to github"
 	@read -p "Version? (provide the next x.y.z semver) : " TAG
-	@VER_FILE=$$(find src -maxdepth 2 -type f -name 'version.py' | head -n 1)
+	@VER_FILE=$$(find argdantic -maxdepth 2 -type f -name 'version.py' | head -n 1)
 	@echo "Updating version file :\n $${VER_FILE}"
 	@echo __version__ = \""$${TAG}"\" > $${VER_FILE}
 	@git add .
-	@git commit -m "🔖 Release version $${TAG}"
-	@echo "creating git tag : $${TAG}"
-	@git tag $${TAG}
+	@git commit -m "🔖 Release version v$${TAG}"
+	@echo "creating git tag : v$${TAG}"
+	@git tag v$${TAG}
 	@git push -u origin HEAD --tags
