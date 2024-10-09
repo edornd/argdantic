@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Optional, Set, Union
+from typing import Callable, Literal, Optional, Set, Union
 
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
@@ -18,6 +18,7 @@ class BaseSettingsStore(ABC):
         self,
         path: Union[str, Path],
         *,
+        mode: Literal["python", "json"] = "python",
         encoding: str = "utf-8",
         include: Optional[Set[str]] = None,
         exclude: Optional[Set[str]] = None,
@@ -27,6 +28,7 @@ class BaseSettingsStore(ABC):
         exclude_none: bool = False,
     ) -> None:
         self.path = Path(path)
+        self.mode = mode
         self.encoding = encoding
         self.include = include
         self.exclude = exclude
