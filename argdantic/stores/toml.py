@@ -21,6 +21,7 @@ class TomlSettingsStore(BaseSettingsStore):
         with self.path.open("wb") as f:
             text = toml.dumps(
                 settings.model_dump(
+                    mode=self.mode,
                     include=self.include,
                     exclude=self.exclude,
                     by_alias=self.by_alias,

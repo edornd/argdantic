@@ -79,3 +79,20 @@ def test_parser_using_json_store(tmp_path: Path, runner: CLIRunner) -> None:
     result = runner.invoke(cli, [])
     assert result.exception is None
     assert result.return_value == ("baz", 42)
+
+
+def test_parser_using_json_store_complex_data(tmp_path: Path, runner: CLIRunner) -> None:
+    from pathlib import Path
+
+    from argdantic import ArgParser
+
+    cli = ArgParser()
+    path = tmp_path / "settings.json"
+
+    @cli.command(stores=[JsonSettingsStore(path)])
+    def main(foo: Path = "baz", bar: int = 42) -> None:
+        return foo, bar
+
+    result = runner.invoke(cli, [])
+    assert result.exception is None
+    assert result.return_value == ("baz", 42)

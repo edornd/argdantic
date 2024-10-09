@@ -61,3 +61,19 @@ def test_parser_using_toml_store(tmp_path: Path, runner: CLIRunner) -> None:
     result = runner.invoke(parser, [])
     assert result.exception is None
     assert result.return_value == ("baz", 42)
+
+
+def test_parser_using_toml_store_complex_data(tmp_path: Path, runner: CLIRunner) -> None:
+    from argdantic import ArgParser
+    from argdantic.stores.toml import TomlSettingsStore
+
+    path = tmp_path / "settings.toml"
+    parser = ArgParser()
+
+    @parser.command(stores=[TomlSettingsStore(path, mode="json")])
+    def main(foo: Path = "baz", bar: int = 42) -> None:
+        return foo, bar
+
+    result = runner.invoke(parser, [])
+    assert result.exception is None
+    assert result.return_value == ("baz", 42)

@@ -21,6 +21,7 @@ class YamlSettingsStore(BaseSettingsStore):
 
         with self.path.open("w") as f:
             data = settings.model_dump(
+                mode=self.mode,
                 include=self.include,
                 exclude=self.exclude,
                 by_alias=self.by_alias,

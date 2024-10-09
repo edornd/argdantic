@@ -68,3 +68,24 @@ def test_parser_using_yaml_store(tmp_path: Path, runner: CLIRunner) -> None:
     assert result.exception is None
     assert result.return_value == ("qux", 42)
     assert result.return_value == ("qux", 42)
+
+
+def test_parser_using_yaml_store_complex_data(tmp_path: Path, runner: CLIRunner) -> None:
+    from argdantic import ArgParser
+    from argdantic.stores.yaml import YamlSettingsStore
+
+    path = tmp_path / "settings.yaml"
+    parser = ArgParser()
+
+    @parser.command(stores=[YamlSettingsStore(path, mode="json")])
+    def main(foo: Path = "baz", bar: int = 42) -> None:
+        return str(foo), bar
+
+    result = runner.invoke(parser, [])
+    assert result.exception is None
+    assert result.return_value == ("baz", 42)
+
+    result = runner.invoke(parser, ["--foo", "qux", "--bar", "24"])
+    assert result.exception is None
+    print(result.return_value)
+    assert result.return_value == ("qux", 24)
