@@ -1,10 +1,11 @@
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Type, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, InitSettingsSource, PydanticBaseSettingsSource
 
 from argdantic.sources.base import FileBaseSettingsSource
+from argdantic.utils import is_mapping
 
 DEFAULT_SOURCE_FIELD = "_source"
 
@@ -26,8 +27,6 @@ class DynamicFileSource(PydanticBaseSettingsSource):
         self.init_kwargs = init_kwargs
         self.field_name = field_name or DEFAULT_SOURCE_FIELD
         if self.field_name not in init_kwargs:
-            if required:
-                raise ValueError("Missing required source")
             self.source = None
         else:
             self.source = source_cls(settings_cls, init_kwargs[self.field_name])
@@ -36,14 +35,30 @@ class DynamicFileSource(PydanticBaseSettingsSource):
         # Nothing to do here. Only implement the return statement to make mypy happy
         return None, "", False  # pragma: no cover
 
+    def _update_recursive(self, dict_a: Dict[str, Any], dict_b: Dict[str, Any]) -> Dict[str, Any]:
+        # update dict_a with dict_b recursively
+        # for each key in dict_b, if the key is in dict_a, update the value
+        # if the value is a mapping, update it recursively
+        # if the key is not in dict_a, add it
+        for key, value in dict_b.items():
+            if key in dict_a:
+                if is_mapping(type(value)):
+                    dict_a[key] = self._update_recursive(dict_a[key], value)
+                else:
+                    dict_a[key] = value
+            else:
+                dict_a[key] = value
+        return dict_a
+
     def __call__(self) -> Dict[str, Any]:
         if self.source is not None:
             main_kwargs = self.source()
-            main_kwargs.update(self.init_kwargs)
+            kwargs = self._update_recursive(main_kwargs, self.init_kwargs)
+
             # remove the source field if it is the default one
             if self.field_name == DEFAULT_SOURCE_FIELD:
-                main_kwargs.pop(self.field_name)
-            return main_kwargs
+                kwargs.pop(self.field_name)
+            return kwargs
         return self.init_kwargs
 
     def __repr__(self) -> str:
@@ -70,7 +85,7 @@ def from_file(
             # if cli_field is None, an additional argument will be added
             __arg_source_field__ = use_field
             __arg_source_required__ = required
-            model_config = ConfigDict(extra="ignore")
+            # model_config = ConfigDict(extra="ignore")
 
             @classmethod
             def settings_customise_sources(
