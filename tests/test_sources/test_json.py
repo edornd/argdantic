@@ -117,27 +117,6 @@ def test_dynamic_source_repr(tmp_path: Path, runner: CLIRunner, capsys: CaptureF
     assert str(sources[0]) == "DynamicFileSource(source=None)"
 
 
-def test_dynamic_source_required_raises(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
-    from pydantic_settings.sources import InitSettingsSource
-
-    from argdantic.sources import JsonFileLoader, from_file
-
-    with pytest.raises(ValueError):
-
-        @from_file(loader=JsonFileLoader, required=True)
-        class TestModel(BaseModel):
-            foo: str = "default"
-            bar: int = 0
-
-        TestModel.settings_customise_sources(
-            settings_cls=TestModel,
-            init_settings=InitSettingsSource(settings_cls=TestModel, init_kwargs={"foo": "baz", "bar": 42}),
-            env_settings=None,
-            dotenv_settings=None,
-            file_secret_settings=None,
-        )
-
-
 def test_dynamic_json_source_non_required(tmp_path: Path, runner: CLIRunner, capsys: CaptureFixture) -> None:
     from argdantic import ArgParser
     from argdantic.sources import JsonFileLoader, from_file

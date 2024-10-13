@@ -100,3 +100,42 @@ def test_dynamic_yaml_source(tmp_path: Path, runner: CLIRunner, capsys: pytest.C
     result = runner.invoke(parser, ["--model", str(path), "--model.foo", "overridden"])
     assert result.exception is None
     assert result.return_value == {"foo": "overridden", "bar": 42}
+
+
+def test_dynamic_yaml_source_nested_models(tmp_path: Path, runner: CLIRunner, capsys: pytest.CaptureFixture) -> None:
+    from argdantic import ArgParser
+    from argdantic.sources import YamlFileLoader, from_file
+
+    path = create_yaml_file(
+        {
+            "foo": "baz",
+            "bar": 42,
+            "nested": {"foo": "nested_baz", "bar": 24},
+        },
+        tmp_path / "settings.yaml",
+    )
+    parser = ArgParser()
+
+    class NestedModel(BaseModel):
+        foo: str = "default"
+        bar: int = 0
+
+    @from_file(loader=YamlFileLoader)
+    class TestModel(BaseModel):
+        foo: str = "default"
+        bar: int = 0
+        nested: NestedModel = NestedModel()
+
+    @parser.command()
+    def main(model: TestModel) -> None:
+        return model.model_dump()
+
+    # check that the model is populated with the values from the JSON file
+    result = runner.invoke(parser, ["--model", str(path)])
+    assert result.exception is None
+    assert result.return_value == {"foo": "baz", "bar": 42, "nested": {"foo": "nested_baz", "bar": 24}}
+
+    # check that the CLI argument overrides the JSON file
+    result = runner.invoke(parser, ["--model", str(path), "--model.nested.foo", "overridden"])
+    assert result.exception is None
+    assert result.return_value == {"foo": "baz", "bar": 42, "nested": {"foo": "overridden", "bar": 24}}
