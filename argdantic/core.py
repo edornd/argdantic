@@ -117,9 +117,9 @@ class ArgParser(Generic[ParserType]):
         self.commands: List[Command] = []
         self.groups: List[ParserType] = []
         # internal variables
-        assert (
-            internal_delimiter.isidentifier()
-        ), f"The internal delimiter {internal_delimiter} is not a valid identifier"
+        assert internal_delimiter.isidentifier(), (
+            f"The internal delimiter {internal_delimiter} is not a valid identifier"
+        )
 
         self._delimiter = delimiter
         self._internal_delimiter = internal_delimiter
@@ -268,20 +268,20 @@ class ArgParser(Generic[ParserType]):
                 # if the function expects a single argument, we do not wrap it
                 # otherwise, we prepare the fields for the wrapper model
                 if singleton:
-                    assert (
-                        len(func_params) == 1
-                    ), f"The command '{command_name}' expects a single argument, but {len(func_params)} were provided"
+                    assert len(func_params) == 1, (
+                        f"The command '{command_name}' expects a single argument, but {len(func_params)} were provided"
+                    )
                     param_name, param = func_params[0]
-                    assert lenient_issubclass(
-                        param.annotation, BaseModel
-                    ), f"The singleton argument '{param_name}' must be a pydantic model"
+                    assert lenient_issubclass(param.annotation, BaseModel), (
+                        f"The singleton argument '{param_name}' must be a pydantic model"
+                    )
                     model_class = param.annotation
 
                 else:
                     for param_name, param in func_params:
-                        assert (
-                            param.annotation is not inspect.Parameter.empty
-                        ), f"Field '{param_name}' lacks type annotations"
+                        assert param.annotation is not inspect.Parameter.empty, (
+                            f"Field '{param_name}' lacks type annotations"
+                        )
                         default_value = param.default if param.default is not inspect.Parameter.empty else Ellipsis
                         wrapped_fields[param_name] = (param.annotation, default_value)
 
