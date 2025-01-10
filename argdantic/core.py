@@ -120,6 +120,7 @@ class ArgParser(Generic[ParserType]):
         assert (
             internal_delimiter.isidentifier()
         ), f"The internal delimiter {internal_delimiter} is not a valid identifier"
+
         self._delimiter = delimiter
         self._internal_delimiter = internal_delimiter
         self._subcommand_meta = subcommand_meta
@@ -306,7 +307,7 @@ class ArgParser(Generic[ParserType]):
                         # Env and file sources are discarded, the user must provide them explicitly.
                         source_list = cast(List[SettingSourceCallable], sources)
                         callables = [source(settings_cls) for source in source_list]
-                        return (*callables, init_settings)
+                        return (init_settings, *callables)
 
                 model_class = StaticSourceSettings if model_class is None else (model_class, StaticSourceSettings)
 
