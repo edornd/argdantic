@@ -1,6 +1,6 @@
 [project]
-name = "twofold"
-version = "0.0.1"
+name = "argdantic"
+version = "2.0.0.dev0"
 description = "Typed Python CLIs that serve humans and agents from one signature."
 readme = "README.md"
 license = "MIT"
@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/edornd/twofold"
+Repository = "https://github.com/edornd/argdantic"
 
 [build-system]
 requires = ["uv_build>=0.9,<0.10"]

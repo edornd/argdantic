@@ -4,8 +4,8 @@ requires-python = ">=3.11"
 
 [manifest]
 members = [
-    "twofold",
-    "twofold-bench",
+    "argdantic",
+    "argdantic-bench",
 ]
 
 [[package]]
@@ -16,6 +16,40 @@ sdist = { url = "https://files.pythonhosted.org/packages/5f/56/a8120250d128bed16
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl", hash = "sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0", size = 13427, upload-time = "2026-07-23T20:16:12.938Z" },
 ]
+
+[[package]]
+name = "argdantic"
+version = "2.0.0.dev0"
+source = { editable = "." }
+dependencies = [
+    { name = "pydantic-settings" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic-settings", specifier = ">=2.15.0" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.14" },
+]
+
+[[package]]
+name = "argdantic-bench"
+version = "0.0.0"
+source = { editable = "bench" }
+dependencies = [
+    { name = "argdantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "argdantic", editable = "." }]
 
 [[package]]
 name = "colorama"
@@ -273,40 +307,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/cc/77/1ee73df41dcc8d1cdb686ee4bc46ea29704ea175feb6b95c78420f631ab8/ruff-0.17.0-py3-none-win_amd64.whl", hash = "sha256:8ab76bcda86dfd28e13776cb5de3c7bcdcf1ae3d37ed761113d1a5a415dc134c", size = 10115585, upload-time = "2026-10-09T19:47:22.698Z" },
     { url = "https://files.pythonhosted.org/packages/fd/71/eb4f0ccc844aece56963e8578df9c95d4c00f580547d52329d4035d3af18/ruff-0.17.0-py3-none-win_arm64.whl", hash = "sha256:c154c73ff43f9854395e24cac507af13078962e53d2b511605058d22af1fdb88", size = 9872035, upload-time = "2026-10-09T19:47:26.306Z" },
 ]
-
-[[package]]
-name = "twofold"
-version = "0.0.1"
-source = { editable = "." }
-dependencies = [
-    { name = "pydantic-settings" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "pydantic-settings", specifier = ">=2.15.0" }]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.14" },
-]
-
-[[package]]
-name = "twofold-bench"
-version = "0.0.0"
-source = { editable = "bench" }
-dependencies = [
-    { name = "twofold" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "twofold", editable = "." }]
 
 [[package]]
 name = "typing-extensions"

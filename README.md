@@ -1,4 +1,4 @@
-# twofold
+# argdantic
 
 Typed Python CLIs that serve humans and agents from one signature.
 

@@ -1,5 +1,5 @@
-import twofold
+import argdantic
 
 
 def test_version_is_exposed() -> None:
-    assert twofold.__version__ == "0.0.1"
+    assert argdantic.__version__ == "2.0.0.dev0"
