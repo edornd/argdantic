@@ -1,0 +1,13 @@
+[project]
+name = "twofold-bench"
+version = "0.0.0"
+description = "Accuracy benchmark for twofold (not published)."
+requires-python = ">=3.11"
+dependencies = ["twofold"]
+
+[tool.uv.sources]
+twofold = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.9,<0.10"]
+build-backend = "uv_build"
