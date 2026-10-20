@@ -1,6 +1,6 @@
-"""Typed Python CLIs that serve humans and agents from one signature."""
-
 from importlib.metadata import version
 
+from argdantic.app import App
+
 __version__ = version("argdantic")
-__all__ = ["__version__"]
+__all__ = ["App", "__version__"]
