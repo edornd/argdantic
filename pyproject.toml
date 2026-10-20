@@ -25,7 +25,11 @@ requires = ["uv_build>=0.9,<0.10"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.14"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.14",
+    "ty==0.0.89",
+]
 
 [tool.uv.workspace]
 members = ["bench"]
