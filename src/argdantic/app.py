@@ -14,7 +14,15 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from argdantic._errors import emit, invalid_input, leftover_errors, usage_report, validation_errors
+from argdantic._errors import (
+    CommandError,
+    command_failure,
+    emit,
+    invalid_input,
+    leftover_errors,
+    usage_report,
+    validation_errors,
+)
 from argdantic.docstrings import parse_docstring
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -202,7 +210,10 @@ class App:
             field_errors += validation_errors(spec.model, error)
         if field_errors:
             emit(invalid_input(field_errors))
-        result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
+        try:
+            result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
+        except CommandError as error:
+            emit(command_failure(error))
         if result is not None:
             print(json.dumps(spec.output.dump_python(result, mode="json")))
         raise SystemExit(0)

@@ -2,6 +2,7 @@
 
 import enum
 import json
+import re
 import types
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, NoReturn, Union, get_args, get_origin
@@ -11,6 +12,38 @@ from pydantic import BaseModel, ValidationError
 EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_REJECTED = 2
+
+_SCREAMING_CASE = re.compile(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*")
+
+
+class CommandError(Exception):
+    """A failure the command reports on purpose, rendered with its own code instead of UNKNOWN.
+
+    Args:
+        code: a stable SCREAMING_CASE name that programs match on.
+        message: one short line for the reader. Only the first line is shown.
+        retryable: whether the same call may succeed if tried again.
+        hint: what the caller can do about it.
+        exit_code: the process exit code.
+    """
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool = False,
+        hint: str | None = None,
+        exit_code: int = EXIT_FAILED,
+    ) -> None:
+        if not _SCREAMING_CASE.fullmatch(code):
+            raise ValueError(f"error code must be SCREAMING_CASE, got {code!r}")
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+        self.hint = hint
+        self.exit_code = exit_code
 
 
 @dataclass(frozen=True)
@@ -49,7 +82,8 @@ class ErrorReport:
     field_errors: list[FieldError] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {"code": self.code, "message": self.message, "retryable": self.retryable}
+        message = self.message.strip().partition("\n")[0]
+        data: dict[str, Any] = {"code": self.code, "message": message, "retryable": self.retryable}
         if self.hint is not None:
             data["hint"] = self.hint
         if self.field_errors:
@@ -170,6 +204,16 @@ def invalid_input(field_errors: list[FieldError]) -> ErrorReport:
 def usage_report(message: str) -> ErrorReport:
     """An input error argparse found on its own, such as a flag without its value."""
     return ErrorReport(code="VALIDATION_ERROR", message=message, exit_code=EXIT_REJECTED)
+
+
+def command_failure(error: CommandError) -> ErrorReport:
+    return ErrorReport(
+        code=error.code,
+        message=error.message,
+        exit_code=error.exit_code,
+        retryable=error.retryable,
+        hint=error.hint,
+    )
 
 
 def emit(report: ErrorReport) -> NoReturn:

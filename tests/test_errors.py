@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal
 import pytest
 from pydantic import BaseModel, Field
 
-from argdantic import App
+from argdantic import App, CommandError
 
 
 def run(app: App, argv: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, Any]:
@@ -180,3 +180,42 @@ def test_argparse_usage_error_is_a_validation_error(capsys: pytest.CaptureFixtur
         "message": "argument --epochs: expected one argument",
         "retryable": False,
     }
+
+
+def run_failing(error: Exception, capsys: pytest.CaptureFixture[str]) -> tuple[int, Any]:
+    app = App("trainctl")
+
+    @app.command
+    def train() -> None:
+        raise error
+
+    return run(app, ["train"], capsys)
+
+
+def test_command_error_renders_its_own_code_and_exit_code(capsys: pytest.CaptureFixture[str]) -> None:
+    error = CommandError("RUN_EXISTS", "run a already exists", hint="pass a new --run-id")
+
+    assert run_failing(error, capsys) == (
+        1,
+        {"code": "RUN_EXISTS", "message": "run a already exists", "retryable": False, "hint": "pass a new --run-id"},
+    )
+
+
+def test_command_error_options_override_the_defaults(capsys: pytest.CaptureFixture[str]) -> None:
+    error = CommandError("QUEUE_FULL", "the queue is full", retryable=True, exit_code=3)
+
+    assert run_failing(error, capsys) == (3, {"code": "QUEUE_FULL", "message": "the queue is full", "retryable": True})
+
+
+def test_error_message_keeps_only_its_first_line(capsys: pytest.CaptureFixture[str]) -> None:
+    error = CommandError("RUN_EXISTS", "run a already exists\nsee runs/a for details")
+
+    _, rendered = run_failing(error, capsys)
+
+    assert rendered["message"] == "run a already exists"
+
+
+@pytest.mark.parametrize("code", ["run_exists", "RunExists", "RUN-EXISTS", "", "_RUN"])
+def test_command_error_code_must_be_screaming_case(code: str) -> None:
+    with pytest.raises(ValueError, match="SCREAMING_CASE"):
+        CommandError(code, "message")
