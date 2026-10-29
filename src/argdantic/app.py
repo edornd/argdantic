@@ -3,7 +3,7 @@ import inspect
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, TypeVar, overload
+from typing import Any, NoReturn, TypeVar, overload
 
 from pydantic import Field, TypeAdapter, ValidationError, create_model
 from pydantic_settings import (
@@ -14,7 +14,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from argdantic._errors import emit, validation_report
+from argdantic._errors import emit, invalid_input, leftover_errors, usage_report, validation_errors
 from argdantic.docstrings import parse_docstring
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -99,6 +99,27 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     )
 
 
+class _UsageError(Exception):
+    """An input error argparse found on its own. The message is argparse's, passed through untouched."""
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse prints usage and exits on errors; argdantic needs them as values to render."""
+
+    def error(self, message: str) -> NoReturn:
+        raise _UsageError(message)
+
+
+def _flags(parser: argparse.ArgumentParser) -> list[str]:
+    """Every flag spelling a leaf accepts, except help."""
+    return [
+        option
+        for action in parser._actions
+        if not isinstance(action, argparse._HelpAction)
+        for option in action.option_strings
+    ]
+
+
 class App:
     """A CLI: a named tree of commands that runs from an argv list."""
 
@@ -146,24 +167,31 @@ class App:
         self._commands[spec.name] = spec
 
     def _parser(self) -> argparse.ArgumentParser:
-        parser = argparse.ArgumentParser(prog=self.name)
+        # allow_abbrev=False: argparse would otherwise expand a prefix like --epo to --epochs without a word.
+        parser = _Parser(prog=self.name, allow_abbrev=False)
         subparsers = parser.add_subparsers(dest="_command_name", required=True)
         for spec in self._commands.values():
             subparser = subparsers.add_parser(
                 spec.name,
                 help=spec.summary,
                 description=spec.summary,
+                allow_abbrev=False,
             )
             subparser.set_defaults(
                 _command_spec=spec,
                 _cli_source=CliSettingsSource(spec.model, root_parser=subparser),
+                _leaf_parser=subparser,
             )
         return parser
 
     def __call__(self, argv: Sequence[str] | None = None) -> None:
-        # argparse reads sys.argv[1:] when argv is None.
-        parsed_args = self._parser().parse_args(argv)
+        try:
+            # argparse reads sys.argv[1:] when argv is None.
+            parsed_args, leftovers = self._parser().parse_known_args(argv)
+        except _UsageError as error:
+            emit(usage_report(str(error)))
         spec: CommandSpec = parsed_args._command_spec
+        field_errors = leftover_errors(leftovers, _flags(parsed_args._leaf_parser))
         try:
             command_inputs = CliApp.run(
                 spec.model,
@@ -171,7 +199,9 @@ class App:
                 cli_settings_source=parsed_args._cli_source,
             )
         except ValidationError as error:
-            emit(validation_report(spec.model, error))
+            field_errors += validation_errors(spec.model, error)
+        if field_errors:
+            emit(invalid_input(field_errors))
         result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
         if result is not None:
             print(json.dumps(spec.output.dump_python(result, mode="json")))

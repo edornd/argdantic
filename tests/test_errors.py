@@ -90,3 +90,93 @@ def test_choice_errors_list_the_allowed_values(
     assert {key: field_error[key] for key in expected} == expected
     assert field_error["source"] == "flag"
     assert field_error["received"] == argv[1]
+
+
+def make_train_app(calls: list[int]) -> App:
+    app = App("trainctl")
+
+    @app.command
+    def train(epochs: int = 1, learning_rate: float = 0.1, use_slurm: bool = False) -> None:
+        calls.append(epochs)
+
+    return app
+
+
+TRAIN_FLAGS = ["--epochs", "--learning-rate", "--use-slurm", "--no-use-slurm"]
+
+
+@pytest.mark.parametrize(
+    ("argv", "path", "received"),
+    [
+        (["--epoch", "3"], "epoch", "--epoch"),
+        (["--learnin-rate=3"], "learnin_rate", "--learnin-rate"),
+        # argparse would expand an unambiguous prefix to --epochs; argdantic turns that off.
+        (["--epo", "3"], "epo", "--epo"),
+        (["--optim.lrr", "3"], "optim.lrr", "--optim.lrr"),
+    ],
+)
+def test_unknown_flag_lists_the_valid_flags(
+    argv: list[str], path: str, received: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[int] = []
+
+    code, error = run(make_train_app(calls), ["train", *argv], capsys)
+
+    assert code == 2
+    assert calls == []
+    assert error["code"] == "VALIDATION_ERROR"
+    assert error["fieldErrors"] == [
+        {
+            "path": path,
+            "code": "unknown_flag",
+            "message": f"unknown flag {received}",
+            "received": received,
+            "allowed": TRAIN_FLAGS,
+            "source": "flag",
+        }
+    ]
+
+
+def test_stray_token_is_an_unexpected_argument(capsys: pytest.CaptureFixture[str]) -> None:
+    calls: list[int] = []
+
+    code, error = run(make_train_app(calls), ["train", "extra"], capsys)
+
+    assert code == 2
+    assert calls == []
+    assert error["fieldErrors"] == [
+        {
+            "path": "",
+            "code": "unexpected_argument",
+            "message": "unexpected argument extra",
+            "received": "extra",
+            "source": "flag",
+        }
+    ]
+
+
+def test_unknown_flags_come_before_validation_errors(capsys: pytest.CaptureFixture[str]) -> None:
+    code, error = run(make_train_app([]), ["train", "--epochs", "abc", "--bogus"], capsys)
+
+    assert code == 2
+    assert [(item["path"], item["code"]) for item in error["fieldErrors"]] == [
+        ("bogus", "unknown_flag"),
+        ("epochs", "int_parsing"),
+    ]
+
+
+def test_argparse_usage_error_is_a_validation_error(capsys: pytest.CaptureFixture[str]) -> None:
+    calls: list[int] = []
+
+    with pytest.raises(SystemExit) as exc:
+        make_train_app(calls)(["train", "--epochs"])
+    captured = capsys.readouterr()
+
+    assert exc.value.code == 2
+    assert calls == []
+    assert captured.err == ""
+    assert json.loads(captured.out) == {
+        "code": "VALIDATION_ERROR",
+        "message": "argument --epochs: expected one argument",
+        "retryable": False,
+    }

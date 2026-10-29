@@ -4,7 +4,7 @@ import enum
 import json
 import types
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, NoReturn, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError
 
@@ -113,16 +113,66 @@ def _field_error(model: type[BaseModel], error: Any) -> FieldError:
     )
 
 
-def validation_report(model: type[BaseModel], error: ValidationError) -> ErrorReport:
+def validation_errors(model: type[BaseModel], error: ValidationError) -> list[FieldError]:
+    return [_field_error(model, item) for item in error.errors()]
+
+
+def _looks_like_flag(token: str) -> bool:
+    # "-1" is a negative number, "-" conventionally means stdin.
+    return token.startswith("-") and len(token) > 1 and not token[1].isdigit()
+
+
+def leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldError]:
+    """Field errors for the tokens argparse could not place.
+
+    A non-flag token right after an unknown flag is taken as that flag's value and not reported again.
+    """
+    errors: list[FieldError] = []
+    previous_was_bare_flag = False
+    for token in tokens:
+        if _looks_like_flag(token):
+            flag, has_value, _ = token.partition("=")
+            errors.append(
+                FieldError(
+                    path=flag.lstrip("-").replace("-", "_"),
+                    code="unknown_flag",
+                    message=f"unknown flag {flag}",
+                    received=flag,
+                    allowed=valid_flags,
+                    source="flag",
+                )
+            )
+            previous_was_bare_flag = not has_value
+            continue
+        if not previous_was_bare_flag:
+            errors.append(
+                FieldError(
+                    path="",
+                    code="unexpected_argument",
+                    message=f"unexpected argument {token}",
+                    received=token,
+                    source="flag",
+                )
+            )
+        previous_was_bare_flag = False
+    return errors
+
+
+def invalid_input(field_errors: list[FieldError]) -> ErrorReport:
     return ErrorReport(
         code="VALIDATION_ERROR",
         message="invalid input",
         exit_code=EXIT_REJECTED,
-        field_errors=[_field_error(model, item) for item in error.errors()],
+        field_errors=field_errors,
     )
 
 
-def emit(report: ErrorReport) -> None:
+def usage_report(message: str) -> ErrorReport:
+    """An input error argparse found on its own, such as a flag without its value."""
+    return ErrorReport(code="VALIDATION_ERROR", message=message, exit_code=EXIT_REJECTED)
+
+
+def emit(report: ErrorReport) -> NoReturn:
     """Print the error object on stdout and exit with its code."""
     print(json.dumps(report.to_dict()))
     raise SystemExit(report.exit_code)
