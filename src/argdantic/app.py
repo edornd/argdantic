@@ -15,11 +15,14 @@ from pydantic_settings import (
 )
 
 from argdantic._errors import (
+    EXIT_OK,
     CommandError,
+    InputRejected,
     command_failure,
     emit,
     invalid_input,
     leftover_errors,
+    unknown_failure,
     usage_report,
     validation_errors,
 )
@@ -107,15 +110,11 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     )
 
 
-class _UsageError(Exception):
-    """An input error argparse found on its own. The message is argparse's, passed through untouched."""
-
-
 class _Parser(argparse.ArgumentParser):
     """argparse prints usage and exits on errors; argdantic needs them as values to render."""
 
     def error(self, message: str) -> NoReturn:
-        raise _UsageError(message)
+        raise InputRejected(usage_report(message))
 
 
 def _flags(parser: argparse.ArgumentParser) -> list[str]:
@@ -192,12 +191,24 @@ class App:
             )
         return parser
 
-    def __call__(self, argv: Sequence[str] | None = None) -> None:
+    def __call__(self, argv: Sequence[str] | None = None) -> NoReturn:
+        """Run the command named in argv (default `sys.argv[1:]`), print its result or error and exit."""
         try:
-            # argparse reads sys.argv[1:] when argv is None.
-            parsed_args, leftovers = self._parser().parse_known_args(argv)
-        except _UsageError as error:
-            emit(usage_report(str(error)))
+            output = self._run(argv)
+        except InputRejected as rejection:
+            emit(rejection.report)
+        except CommandError as error:
+            emit(command_failure(error))
+        except Exception as error:
+            emit(unknown_failure(error))
+        if output is not None:
+            print(output)
+        raise SystemExit(EXIT_OK)
+
+    def _run(self, argv: Sequence[str] | None) -> str | None:
+        """The rendered result, or None when there is nothing to print."""
+        # argparse reads sys.argv[1:] when argv is None.
+        parsed_args, leftovers = self._parser().parse_known_args(argv)
         spec: CommandSpec = parsed_args._command_spec
         field_errors = leftover_errors(leftovers, _flags(parsed_args._leaf_parser))
         try:
@@ -209,11 +220,8 @@ class App:
         except ValidationError as error:
             field_errors += validation_errors(spec.model, error)
         if field_errors:
-            emit(invalid_input(field_errors))
-        try:
-            result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
-        except CommandError as error:
-            emit(command_failure(error))
-        if result is not None:
-            print(json.dumps(spec.output.dump_python(result, mode="json")))
-        raise SystemExit(0)
+            raise InputRejected(invalid_input(field_errors))
+        result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
+        if result is None:
+            return None
+        return json.dumps(spec.output.dump_python(result, mode="json"))

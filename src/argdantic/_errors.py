@@ -2,12 +2,15 @@
 
 import enum
 import json
+import os
 import re
+import sys
+import traceback
 import types
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, NoReturn, Union, get_args, get_origin
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -204,6 +207,29 @@ def invalid_input(field_errors: list[FieldError]) -> ErrorReport:
 def usage_report(message: str) -> ErrorReport:
     """An input error argparse found on its own, such as a flag without its value."""
     return ErrorReport(code="VALIDATION_ERROR", message=message, exit_code=EXIT_REJECTED)
+
+
+class InputRejected(Exception):
+    """Raised inside a run when the input is rejected; carries the report to print."""
+
+    def __init__(self, report: ErrorReport) -> None:
+        super().__init__(report.message)
+        self.report = report
+
+
+def _debug_enabled() -> bool:
+    # Read outside the app's env isolation. pydantic's bool parsing decides; an unreadable value counts as off.
+    try:
+        return TypeAdapter(bool).validate_python(os.environ.get("ARGD_DEBUG", ""))
+    except ValidationError:
+        return False
+
+
+def unknown_failure(error: Exception) -> ErrorReport:
+    """An exception the command did not expect. The traceback goes to stderr only when ARGD_DEBUG is on."""
+    if _debug_enabled():
+        traceback.print_exception(error, file=sys.stderr)
+    return ErrorReport(code="UNKNOWN", message=str(error).strip() or type(error).__name__, exit_code=EXIT_FAILED)
 
 
 def command_failure(error: CommandError) -> ErrorReport:

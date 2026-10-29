@@ -219,3 +219,80 @@ def test_error_message_keeps_only_its_first_line(capsys: pytest.CaptureFixture[s
 def test_command_error_code_must_be_screaming_case(code: str) -> None:
     with pytest.raises(ValueError, match="SCREAMING_CASE"):
         CommandError(code, "message")
+
+
+def test_uncaught_exception_is_unknown_without_a_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("ARGD_DEBUG", raising=False)
+    app = App("trainctl")
+
+    @app.command
+    def train() -> None:
+        raise RuntimeError("disk full\nwhile writing runs/a")
+
+    with pytest.raises(SystemExit) as exc:
+        app(["train"])
+    captured = capsys.readouterr()
+
+    assert exc.value.code == 1
+    assert json.loads(captured.out) == {"code": "UNKNOWN", "message": "disk full", "retryable": False}
+    assert captured.err == ""
+
+
+def test_exception_without_text_falls_back_to_its_type_name(capsys: pytest.CaptureFixture[str]) -> None:
+    class QuotaExceeded(Exception):
+        pass
+
+    assert run_failing(QuotaExceeded(), capsys) == (
+        1,
+        {"code": "UNKNOWN", "message": "QuotaExceeded", "retryable": False},
+    )
+
+
+def test_result_that_cannot_be_serialised_is_unknown(capsys: pytest.CaptureFixture[str]) -> None:
+    app = App("tool")
+
+    @app.command
+    def broken() -> int:
+        return object()  # ty: ignore[invalid-return-type]
+
+    code, error = run(app, ["broken"], capsys)
+
+    assert code == 1
+    assert error["code"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize(
+    ("value", "shows_traceback"),
+    [("1", True), ("true", True), ("on", True), ("0", False), ("off", False), ("", False), ("verbose", False)],
+)
+def test_argd_debug_sends_the_traceback_to_stderr(
+    value: str, shows_traceback: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("ARGD_DEBUG", value)
+    app = App("trainctl")
+
+    @app.command
+    def train() -> None:
+        raise RuntimeError("disk full")
+
+    with pytest.raises(SystemExit) as exc:
+        app(["train"])
+    out, err = capsys.readouterr()
+
+    assert (exc.value.code, json.loads(out)["code"]) == (1, "UNKNOWN")
+    assert ("Traceback" in err and "RuntimeError: disk full" in err) is shows_traceback
+    if not shows_traceback:
+        assert err == ""
+
+
+def test_keyboard_interrupt_is_not_turned_into_an_error() -> None:
+    app = App("tool")
+
+    @app.command
+    def wait() -> None:
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        app(["wait"])
