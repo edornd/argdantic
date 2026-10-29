@@ -10,7 +10,7 @@ import types
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, NoReturn, Union, get_args, get_origin
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, SecretBytes, SecretStr, TypeAdapter, ValidationError
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -135,17 +135,25 @@ def _choices(annotation: Any) -> list[Any]:
     return []
 
 
+def _is_secret(annotation: Any) -> bool:
+    annotation = _unwrap_annotated(annotation)
+    if get_origin(annotation) in (Union, types.UnionType):
+        return any(_is_secret(member) for member in get_args(annotation))
+    return isinstance(annotation, type) and issubclass(annotation, SecretStr | SecretBytes)
+
+
 def _field_error(model: type[BaseModel], error: Any) -> FieldError:
     loc = error["loc"]
     if error["type"] == "missing":
         # pydantic puts the whole parent input in `input` here, and no value came from any source.
         return FieldError(path=_dotted(loc), code="missing", message=error["msg"])
+    annotation = _annotation_at(model, loc)
     return FieldError(
         path=_dotted(loc),
         code=error["type"],
         message=error["msg"],
-        received=error["input"],
-        allowed=_choices(_annotation_at(model, loc)) or None,
+        received=None if _is_secret(annotation) else error["input"],
+        allowed=_choices(annotation) or None,
         source="flag",
     )
 

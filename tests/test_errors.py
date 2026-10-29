@@ -3,7 +3,7 @@ import json
 from typing import Annotated, Any, Literal
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretBytes, SecretStr
 
 from argdantic import App, CommandError
 
@@ -296,3 +296,40 @@ def test_keyboard_interrupt_is_not_turned_into_an_error() -> None:
 
     with pytest.raises(KeyboardInterrupt):
         app(["wait"])
+
+
+class Credentials(BaseModel):
+    api_key: Annotated[SecretBytes, Field(min_length=8)]
+
+
+DEFAULT_CREDENTIALS = Credentials(api_key=SecretBytes(b"a-long-enough-key"))
+DEFAULT_TOKEN = SecretStr("a-long-enough-token")
+
+
+@pytest.mark.parametrize(
+    ("argv", "path"),
+    [
+        (["--token", "abc"], "token"),
+        (["--maybe-token", "abc"], "maybe_token"),
+        (["--creds.api-key", "abc"], "creds.api_key"),
+    ],
+)
+def test_secret_fields_never_echo_the_received_value(
+    argv: list[str], path: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app = App("admin")
+
+    @app.command
+    def login(
+        token: Annotated[SecretStr, Field(min_length=8)] = DEFAULT_TOKEN,
+        maybe_token: Annotated[SecretStr, Field(min_length=8)] | None = None,
+        creds: Credentials = DEFAULT_CREDENTIALS,
+    ) -> None: ...
+
+    code, error = run(app, ["login", *argv], capsys)
+
+    assert code == 2
+    [field_error] = error["fieldErrors"]
+    assert field_error["path"] == path
+    assert "received" not in field_error
+    assert "abc" not in json.dumps(error)
