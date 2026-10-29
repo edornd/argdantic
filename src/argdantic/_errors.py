@@ -158,6 +158,7 @@ def _field_error(model: type[BaseModel], error: Any) -> FieldError:
         path=_dotted(loc),
         code=error["type"],
         message=error["msg"],
+        expected=error.get("ctx", {}).get("expected"),
         received=None if _is_secret(annotation) else error["input"],
         allowed=_choices(annotation) or None,
         source="flag",

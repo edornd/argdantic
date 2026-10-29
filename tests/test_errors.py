@@ -91,6 +91,7 @@ def test_choice_errors_list_the_allowed_values(
     assert {key: field_error[key] for key in expected} == expected
     assert field_error["source"] == "flag"
     assert field_error["received"] == argv[1]
+    assert field_error["expected"] == " or ".join(repr(choice) for choice in expected["allowed"])
 
 
 def make_train_app(calls: list[int]) -> App:
