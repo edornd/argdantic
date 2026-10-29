@@ -1,7 +1,6 @@
 import argparse
 import inspect
 import json
-import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar, overload
@@ -15,6 +14,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from argdantic._errors import emit, validation_report
 from argdantic.docstrings import parse_docstring
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -171,9 +171,7 @@ class App:
                 cli_settings_source=parsed_args._cli_source,
             )
         except ValidationError as error:
-            # Plain text until structured errors land (ticket 02).
-            print(error, file=sys.stderr)
-            raise SystemExit(2) from None
+            emit(validation_report(spec.model, error))
         result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
         if result is not None:
             print(json.dumps(spec.output.dump_python(result, mode="json")))
