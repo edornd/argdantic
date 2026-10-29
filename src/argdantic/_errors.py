@@ -16,6 +16,10 @@ EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_REJECTED = 2
 
+# Bench-only switch for the structured-vs-string errors ablation. Not public API. When True, errors print as the
+# plain text pydantic and argparse produce on their own (or the exception text), with the same exit codes.
+_string_errors = False
+
 _SCREAMING_CASE = re.compile(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*")
 
 
@@ -83,6 +87,8 @@ class ErrorReport:
     retryable: bool = False
     hint: str | None = None
     field_errors: list[FieldError] = field(default_factory=list)
+    # What pydantic or argparse would print on their own. Only the string-errors ablation shows it.
+    native_text: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         message = self.message.strip().partition("\n")[0]
@@ -203,13 +209,19 @@ def leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldErro
     return errors
 
 
-def invalid_input(field_errors: list[FieldError]) -> ErrorReport:
+def invalid_input(field_errors: list[FieldError], native_text: str) -> ErrorReport:
     return ErrorReport(
         code="VALIDATION_ERROR",
         message="invalid input",
         exit_code=EXIT_REJECTED,
         field_errors=field_errors,
+        native_text=native_text,
     )
+
+
+def unrecognized_text(leftovers: list[str]) -> str:
+    """argparse's own wording for leftover tokens, used only by the string-errors ablation."""
+    return f"unrecognized arguments: {' '.join(leftovers)}"
 
 
 def usage_report(message: str) -> ErrorReport:
@@ -252,5 +264,8 @@ def command_failure(error: CommandError) -> ErrorReport:
 
 def emit(report: ErrorReport) -> NoReturn:
     """Print the error object on stdout and exit with its code."""
-    print(json.dumps(report.to_dict()))
+    if _string_errors:
+        print(report.native_text or report.to_dict()["message"])
+    else:
+        print(json.dumps(report.to_dict()))
     raise SystemExit(report.exit_code)

@@ -23,6 +23,7 @@ from argdantic._errors import (
     invalid_input,
     leftover_errors,
     unknown_failure,
+    unrecognized_text,
     usage_report,
     validation_errors,
 )
@@ -211,6 +212,7 @@ class App:
         parsed_args, leftovers = self._parser().parse_known_args(argv)
         spec: CommandSpec = parsed_args._command_spec
         field_errors = leftover_errors(leftovers, _flags(parsed_args._leaf_parser))
+        native_texts = [unrecognized_text(leftovers)] if leftovers else []
         try:
             command_inputs = CliApp.run(
                 spec.model,
@@ -219,8 +221,9 @@ class App:
             )
         except ValidationError as error:
             field_errors += validation_errors(spec.model, error)
+            native_texts.append(str(error))
         if field_errors:
-            raise InputRejected(invalid_input(field_errors))
+            raise InputRejected(invalid_input(field_errors, "\n".join(native_texts)))
         result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
         if result is None:
             return None

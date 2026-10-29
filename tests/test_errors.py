@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 import pytest
 from pydantic import BaseModel, Field, SecretBytes, SecretStr
 
+import argdantic._errors
 from argdantic import App, CommandError
 
 
@@ -333,3 +334,59 @@ def test_secret_fields_never_echo_the_received_value(
     assert field_error["path"] == path
     assert "received" not in field_error
     assert "abc" not in json.dumps(error)
+
+
+@pytest.fixture
+def string_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(argdantic._errors, "_string_errors", True)
+
+
+def run_text(app: App, argv: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, str]:
+    with pytest.raises(SystemExit) as exc:
+        app(argv)
+    code = exc.value.code
+    assert isinstance(code, int)
+    return code, capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("string_errors")
+def test_string_errors_print_pydantic_and_argparse_text(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out = run_text(make_train_app([]), ["train", "--epochs", "abc", "--bogus", "1"], capsys)
+
+    assert code == 2
+    assert out.startswith("unrecognized arguments: --bogus 1\n1 validation error for Train\nepochs\n")
+    assert "Input should be a valid integer" in out
+
+
+@pytest.mark.usefixtures("string_errors")
+def test_string_errors_print_the_argparse_message(capsys: pytest.CaptureFixture[str]) -> None:
+    assert run_text(make_train_app([]), ["train", "--epochs"], capsys) == (
+        2,
+        "argument --epochs: expected one argument\n",
+    )
+
+
+@pytest.mark.usefixtures("string_errors")
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (CommandError("RUN_EXISTS", "run a already exists", exit_code=3), (3, "run a already exists\n")),
+        (RuntimeError("disk full"), (1, "disk full\n")),
+    ],
+)
+def test_string_errors_print_the_exception_text(
+    error: Exception, expected: tuple[int, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    app = App("trainctl")
+
+    @app.command
+    def train() -> None:
+        raise error
+
+    assert run_text(app, ["train"], capsys) == expected
+
+
+def test_string_errors_switch_is_private() -> None:
+    assert argdantic._errors._string_errors is False
+    assert not any("string" in name for name in argdantic.__all__)
+    assert not hasattr(argdantic, "_string_errors")
