@@ -65,7 +65,7 @@ class CommandError(Exception):
         message: one short line for the reader. Only the first line is shown.
         retryable: whether the same call may succeed if tried again.
         hint: what the caller can do about it.
-        exit_code: the process exit code.
+        exit_code: the process exit code. 0 and 2 are reserved for success and rejected input.
     """
 
     def __init__(
@@ -79,6 +79,8 @@ class CommandError(Exception):
     ) -> None:
         if not _SCREAMING_CASE.fullmatch(code):
             raise ValueError(f"error code must be SCREAMING_CASE, got {code!r}")
+        if exit_code in (EXIT_OK, EXIT_REJECTED):
+            raise ValueError(f"exit code {exit_code} is reserved for success and rejected input")
         super().__init__(message)
         self.code = code
         self.message = message

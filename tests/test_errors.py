@@ -250,6 +250,12 @@ def test_command_error_code_must_be_screaming_case(code: str) -> None:
         CommandError(code, "message")
 
 
+@pytest.mark.parametrize("exit_code", [0, 2])
+def test_command_error_cannot_use_a_reserved_exit_code(exit_code: int) -> None:
+    with pytest.raises(ValueError, match="reserved"):
+        CommandError("RUN_EXISTS", "message", exit_code=exit_code)
+
+
 def test_uncaught_exception_is_unknown_without_a_traceback(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
