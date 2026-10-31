@@ -10,6 +10,7 @@ import types
 from typing import Annotated, Any, Literal, NoReturn, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, SecretBytes, SecretStr, TypeAdapter, ValidationError, field_validator
+from pydantic_settings import SettingsError
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -119,11 +120,14 @@ def rejected_input(
     model: type[BaseModel],
     leftovers: list[str],
     valid_flags: list[str],
-    error: ValidationError | None = None,
+    error: ValidationError | SettingsError | None = None,
 ) -> InputRejected:
     """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors."""
     field_errors = _leftover_errors(leftovers, valid_flags)
     native_texts = [f"unrecognized arguments: {' '.join(leftovers)}"] if leftovers else []
+    if isinstance(error, SettingsError):
+        # malformed JSON in a structured flag. pydantic-settings names the field only in its message text.
+        return InputRejected(str(error), field_errors, "\n".join([*native_texts, str(error)]))
     if error is not None:
         field_errors += [_field_error(model, item) for item in error.errors()]
         native_texts.append(str(error))

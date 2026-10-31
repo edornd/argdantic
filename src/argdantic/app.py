@@ -12,6 +12,7 @@ from pydantic_settings import (
     CliSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
 )
 
 from argdantic.docstrings import parse_docstring
@@ -203,7 +204,7 @@ class App:
                 cli_args=parsed_args,
                 cli_settings_source=parsed_args._cli_source,
             )
-        except ValidationError as error:
+        except (ValidationError, SettingsError) as error:
             raise rejected_input(spec.model, leftovers, valid_flags, error) from None
         if leftovers:
             raise rejected_input(spec.model, leftovers, valid_flags)

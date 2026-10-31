@@ -184,6 +184,33 @@ def test_argparse_usage_error_is_a_validation_error(capsys: pytest.CaptureFixtur
     }
 
 
+@pytest.mark.parametrize(
+    ("argv", "field"),
+    [(["--sizes", "[1,"], "sizes"), (["--optim", "{bad"], "optim"), (["--weights", "{bad"], "weights")],
+)
+def test_malformed_structured_value_is_a_validation_error(
+    argv: list[str], field: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app = App("trainctl")
+    calls = []
+
+    @app.command
+    def train(
+        sizes: list[int] | None = None,
+        optim: Optim = DEFAULT_OPTIM,
+        weights: dict[str, int] | None = None,
+    ) -> None:
+        calls.append(sizes)
+
+    code, error = run(app, ["train", *argv], capsys)
+
+    assert code == 2
+    assert calls == []
+    assert error["code"] == "VALIDATION_ERROR"
+    assert field in error["message"]
+    assert "fieldErrors" not in error
+
+
 def run_failing(error: Exception, capsys: pytest.CaptureFixture[str]) -> tuple[int, Any]:
     app = App("trainctl")
 
