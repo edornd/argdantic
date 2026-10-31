@@ -21,6 +21,7 @@ EXIT_REJECTED = 2
 _string_errors = False
 
 _SCREAMING_CASE = re.compile(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*")
+_NEGATIVE_NUMBER = re.compile(r"-\.?\d")
 
 
 class FieldError(BaseModel):
@@ -202,8 +203,8 @@ def _is_secret(annotation: Any) -> bool:
 
 
 def _looks_like_flag(token: str) -> bool:
-    # "-1" is a negative number, "-" conventionally means stdin.
-    return token.startswith("-") and len(token) > 1 and not token[1].isdigit()
+    # "-1" and "-.5" are negative numbers, "-" conventionally means stdin and "--" ends the flags.
+    return token.startswith("-") and token not in ("-", "--") and not _NEGATIVE_NUMBER.match(token)
 
 
 def _leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldError]:

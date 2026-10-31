@@ -157,6 +157,21 @@ def test_stray_token_is_an_unexpected_argument(capsys: pytest.CaptureFixture[str
     ]
 
 
+@pytest.mark.parametrize(
+    ("argv", "tokens"),
+    [(["--", "extra"], ["--", "extra"]), (["-.5"], ["-.5"]), (["-1e3"], ["-1e3"]), (["-"], ["-"])],
+)
+def test_separator_and_negative_numbers_are_not_flags(
+    argv: list[str], tokens: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, error = run(make_train_app([]), ["train", *argv], capsys)
+
+    assert code == 2
+    assert [(item["code"], item["received"]) for item in error["fieldErrors"]] == [
+        ("unexpected_argument", token) for token in tokens
+    ]
+
+
 def test_unknown_flags_come_before_validation_errors(capsys: pytest.CaptureFixture[str]) -> None:
     code, error = run(make_train_app([]), ["train", "--epochs", "abc", "--bogus"], capsys)
 
