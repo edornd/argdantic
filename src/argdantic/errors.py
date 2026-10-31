@@ -1,5 +1,3 @@
-"""Error objects, exit codes and their rendering. Only `CommandError` is exported from `argdantic`."""
-
 import enum
 import json
 import os
@@ -7,21 +5,23 @@ import re
 import sys
 import traceback
 import types
-from typing import Annotated, Any, Literal, NoReturn, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, NoReturn, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, SecretBytes, SecretStr, TypeAdapter, ValidationError, field_validator
+from pydantic_core import ErrorDetails
 from pydantic_settings import SettingsError
 
-EXIT_OK = 0
-EXIT_FAILED = 1
-EXIT_REJECTED = 2
-
-# Bench-only switch for the structured-vs-string errors ablation. Not public API. When True, errors print as the
-# plain text pydantic and argparse produce on their own (or the exception text), with the same exit codes.
+# bench-only switch for the structured-vs-string errors ablation, not public API
 _string_errors = False
 
 _SCREAMING_CASE = re.compile(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*")
 _NEGATIVE_NUMBER = re.compile(r"-\.?\d")
+
+
+class ExitCode(enum.IntEnum):
+    OK = 0
+    FAILED = 1
+    REJECTED = 2
 
 
 class FieldError(BaseModel):
@@ -49,7 +49,7 @@ class ErrorReport(BaseModel):
     hint: str | None = None
     field_errors: list[FieldError] | None = Field(default=None, serialization_alias="fieldErrors")
     exit_code: int = Field(exclude=True)
-    # What pydantic or argparse would print on their own. Only the string-errors ablation shows it.
+    # what pydantic or argparse print on their own, shown only by the string-errors switch
     native_text: str | None = Field(default=None, exclude=True)
 
     @field_validator("message")
@@ -76,11 +76,11 @@ class CommandError(Exception):
         *,
         retryable: bool = False,
         hint: str | None = None,
-        exit_code: int = EXIT_FAILED,
+        exit_code: int = ExitCode.FAILED,
     ) -> None:
         if not _SCREAMING_CASE.fullmatch(code):
             raise ValueError(f"error code must be SCREAMING_CASE, got {code!r}")
-        if exit_code in (EXIT_OK, EXIT_REJECTED):
+        if exit_code in (ExitCode.OK, ExitCode.REJECTED):
             raise ValueError(f"exit code {exit_code} is reserved for success and rejected input")
         super().__init__(message)
         self.code = code
@@ -110,37 +110,44 @@ class InputRejected(Exception):
         native_text: str | None = None,
     ) -> None:
         super().__init__(message)
-        self.report = ErrorReport(
+        self.message = message
+        self.field_errors = field_errors or None
+        self.native_text = native_text
+
+    @classmethod
+    def from_parse(
+        cls,
+        model: type[BaseModel],
+        leftovers: list[str],
+        valid_flags: list[str],
+        error: ValidationError | SettingsError | None = None,
+    ) -> Self:
+        """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors."""
+        field_errors = _leftover_errors(leftovers, valid_flags)
+        native_texts = [f"unrecognized arguments: {' '.join(leftovers)}"] if leftovers else []
+        if isinstance(error, SettingsError):
+            # malformed JSON in a structured flag, pydantic-settings names the field only in its message
+            return cls(str(error), field_errors, "\n".join([*native_texts, str(error)]))
+        if error is not None:
+            field_errors += [_field_error(model, item) for item in error.errors()]
+            native_texts.append(str(error))
+        return cls("invalid input", field_errors, "\n".join(native_texts))
+
+    @property
+    def report(self) -> ErrorReport:
+        return ErrorReport(
             code="VALIDATION_ERROR",
-            message=message,
-            field_errors=field_errors or None,
-            exit_code=EXIT_REJECTED,
-            native_text=native_text,
+            message=self.message,
+            field_errors=self.field_errors,
+            exit_code=ExitCode.REJECTED,
+            native_text=self.native_text,
         )
 
 
-def rejected_input(
-    model: type[BaseModel],
-    leftovers: list[str],
-    valid_flags: list[str],
-    error: ValidationError | SettingsError | None = None,
-) -> InputRejected:
-    """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors."""
-    field_errors = _leftover_errors(leftovers, valid_flags)
-    native_texts = [f"unrecognized arguments: {' '.join(leftovers)}"] if leftovers else []
-    if isinstance(error, SettingsError):
-        # malformed JSON in a structured flag. pydantic-settings names the field only in its message text.
-        return InputRejected(str(error), field_errors, "\n".join([*native_texts, str(error)]))
-    if error is not None:
-        field_errors += [_field_error(model, item) for item in error.errors()]
-        native_texts.append(str(error))
-    return InputRejected("invalid input", field_errors, "\n".join(native_texts))
-
-
-def _field_error(model: type[BaseModel], error: Any) -> FieldError:
+def _field_error(model: type[BaseModel], error: ErrorDetails) -> FieldError:
     loc = error["loc"]
     if error["type"] == "missing":
-        # pydantic puts the whole parent input in `input` here, and no value came from any source.
+        # `input` holds the whole parent input here, not a value for this field
         return FieldError(path=_dotted(loc), code="missing", message=error["msg"])
     annotation = _annotation_at(model, loc)
     return FieldError(
@@ -203,7 +210,7 @@ def _is_secret(annotation: Any) -> bool:
 
 
 def _looks_like_flag(token: str) -> bool:
-    # "-1" and "-.5" are negative numbers, "-" conventionally means stdin and "--" ends the flags.
+    # "-1" and "-.5" are numbers, "-" means stdin and "--" ends the flags
     return token.startswith("-") and token not in ("-", "--") and not _NEGATIVE_NUMBER.match(token)
 
 
@@ -256,7 +263,7 @@ def fail(error: Exception) -> NoReturn:
             if _debug_enabled():
                 traceback.print_exception(error, file=sys.stderr)
             message = str(error).strip() or type(error).__name__
-            report = ErrorReport(code="UNKNOWN", message=message, exit_code=EXIT_FAILED)
+            report = ErrorReport(code="UNKNOWN", message=message, exit_code=ExitCode.FAILED)
     if _string_errors:
         print(report.native_text or report.message)
     else:
@@ -265,7 +272,7 @@ def fail(error: Exception) -> NoReturn:
 
 
 def _debug_enabled() -> bool:
-    # Read outside the app's env isolation. pydantic's bool parsing decides; an unreadable value counts as off.
+    # an unparseable value counts as off
     try:
         return TypeAdapter(bool).validate_python(os.environ.get("ARGD_DEBUG", ""))
     except ValidationError:

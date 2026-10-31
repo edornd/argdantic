@@ -5,11 +5,15 @@ _PARAM_LINE = re.compile(r"^(\*{0,2}\w+)(?:\s*\(.*\))?:\s*(.*)$")
 
 
 def parse_docstring(doc: str) -> tuple[str, dict[str, str]]:
-    """
-    Return the first line of `doc` and a map from parameter name to its `Args:` description.
+    """Split a Google-style docstring into its summary line and its `Args:` descriptions.
 
-    `doc` is expected to be already dedented (as returned by `inspect.getdoc`). Continuation lines of a
-    parameter, indented deeper than its name, are joined to it with single spaces.
+    Continuation lines of a parameter, indented deeper than its name, are joined to it with single spaces.
+
+    Args:
+        doc: a dedented docstring, as `inspect.getdoc` returns it.
+
+    Returns:
+        The first line of `doc`, and a map from parameter name to its description.
     """
     lines = doc.splitlines()
     summary = lines[0].strip() if lines else ""
@@ -31,8 +35,8 @@ def parse_docstring(doc: str) -> tuple[str, dict[str, str]]:
             param_indent = indent
         param_match = _PARAM_LINE.match(text)
         if indent == param_indent and param_match:
-            param_name: str = param_match.group(1).lstrip("*")
-            first_part: str = param_match.group(2)
+            param_name = param_match.group(1).lstrip("*")
+            first_part = param_match.group(2)
             description_parts[param_name] = [first_part] if first_part else []
             current_param = param_name
         elif indent > param_indent and current_param is not None:
