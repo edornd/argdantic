@@ -7,10 +7,9 @@ import re
 import sys
 import traceback
 import types
-from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, NoReturn, Union, get_args, get_origin
 
-from pydantic import BaseModel, SecretBytes, SecretStr, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SecretBytes, SecretStr, TypeAdapter, ValidationError, field_validator
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -21,6 +20,40 @@ EXIT_REJECTED = 2
 _string_errors = False
 
 _SCREAMING_CASE = re.compile(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*")
+
+
+class FieldError(BaseModel):
+    """One problem with one input value."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    code: str
+    message: str
+    expected: str | None = None
+    received: Any = None
+    allowed: list[Any] | None = None
+    source: str | None = None
+
+
+class ErrorReport(BaseModel):
+    """A failed run: the error object plus the exit code that goes with it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    code: str
+    message: str
+    retryable: bool = False
+    hint: str | None = None
+    field_errors: list[FieldError] | None = Field(default=None, serialization_alias="fieldErrors")
+    exit_code: int = Field(exclude=True)
+    # What pydantic or argparse would print on their own. Only the string-errors ablation shows it.
+    native_text: str | None = Field(default=None, exclude=True)
+
+    @field_validator("message")
+    @classmethod
+    def _first_line(cls, message: str) -> str:
+        return message.strip().partition("\n")[0]
 
 
 class CommandError(Exception):
@@ -52,56 +85,76 @@ class CommandError(Exception):
         self.hint = hint
         self.exit_code = exit_code
 
-
-@dataclass(frozen=True)
-class FieldError:
-    """One problem with one input value."""
-
-    path: str
-    code: str
-    message: str
-    expected: str | None = None
-    received: Any = None
-    allowed: list[Any] | None = None
-    source: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {"path": self.path, "code": self.code, "message": self.message}
-        optional = {
-            "expected": self.expected,
-            "received": self.received,
-            "allowed": self.allowed,
-            "source": self.source,
-        }
-        data.update({key: value for key, value in optional.items() if value is not None})
-        return data
+    @property
+    def report(self) -> ErrorReport:
+        return ErrorReport(
+            code=self.code,
+            message=self.message,
+            retryable=self.retryable,
+            hint=self.hint,
+            exit_code=self.exit_code,
+        )
 
 
-@dataclass(frozen=True)
-class ErrorReport:
-    """A failed run: the error object plus the exit code that goes with it."""
+class InputRejected(Exception):
+    """Raised inside a run when the input is rejected, before the command is called."""
 
-    code: str
-    message: str
-    exit_code: int
-    retryable: bool = False
-    hint: str | None = None
-    field_errors: list[FieldError] = field(default_factory=list)
-    # What pydantic or argparse would print on their own. Only the string-errors ablation shows it.
-    native_text: str | None = None
+    def __init__(
+        self,
+        message: str,
+        field_errors: list[FieldError] | None = None,
+        native_text: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.report = ErrorReport(
+            code="VALIDATION_ERROR",
+            message=message,
+            field_errors=field_errors or None,
+            exit_code=EXIT_REJECTED,
+            native_text=native_text,
+        )
 
-    def to_dict(self) -> dict[str, Any]:
-        message = self.message.strip().partition("\n")[0]
-        data: dict[str, Any] = {"code": self.code, "message": message, "retryable": self.retryable}
-        if self.hint is not None:
-            data["hint"] = self.hint
-        if self.field_errors:
-            data["fieldErrors"] = [error.to_dict() for error in self.field_errors]
-        return data
+
+def rejected_input(
+    model: type[BaseModel],
+    leftovers: list[str],
+    valid_flags: list[str],
+    error: ValidationError | None = None,
+) -> InputRejected:
+    """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors."""
+    field_errors = _leftover_errors(leftovers, valid_flags)
+    native_texts = [f"unrecognized arguments: {' '.join(leftovers)}"] if leftovers else []
+    if error is not None:
+        field_errors += [_field_error(model, item) for item in error.errors()]
+        native_texts.append(str(error))
+    return InputRejected("invalid input", field_errors, "\n".join(native_texts))
+
+
+def _field_error(model: type[BaseModel], error: Any) -> FieldError:
+    loc = error["loc"]
+    if error["type"] == "missing":
+        # pydantic puts the whole parent input in `input` here, and no value came from any source.
+        return FieldError(path=_dotted(loc), code="missing", message=error["msg"])
+    annotation = _annotation_at(model, loc)
+    return FieldError(
+        path=_dotted(loc),
+        code=error["type"],
+        message=error["msg"],
+        expected=error.get("ctx", {}).get("expected"),
+        received=None if _is_secret(annotation) else error["input"],
+        allowed=_choices(annotation) or None,
+        source="flag",
+    )
 
 
 def _dotted(loc: tuple[int | str, ...]) -> str:
     return ".".join(str(part) for part in loc)
+
+
+def _unwrap_annotated(annotation: Any) -> Any:
+    while get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    return annotation
 
 
 def _annotation_at(model: type[BaseModel], loc: tuple[int | str, ...]) -> Any:
@@ -120,12 +173,6 @@ def _annotation_at(model: type[BaseModel], loc: tuple[int | str, ...]) -> Any:
             annotation = get_args(annotation)[1]
         else:
             return None
-    return annotation
-
-
-def _unwrap_annotated(annotation: Any) -> Any:
-    while get_origin(annotation) is Annotated:
-        annotation = get_args(annotation)[0]
     return annotation
 
 
@@ -148,33 +195,12 @@ def _is_secret(annotation: Any) -> bool:
     return isinstance(annotation, type) and issubclass(annotation, SecretStr | SecretBytes)
 
 
-def _field_error(model: type[BaseModel], error: Any) -> FieldError:
-    loc = error["loc"]
-    if error["type"] == "missing":
-        # pydantic puts the whole parent input in `input` here, and no value came from any source.
-        return FieldError(path=_dotted(loc), code="missing", message=error["msg"])
-    annotation = _annotation_at(model, loc)
-    return FieldError(
-        path=_dotted(loc),
-        code=error["type"],
-        message=error["msg"],
-        expected=error.get("ctx", {}).get("expected"),
-        received=None if _is_secret(annotation) else error["input"],
-        allowed=_choices(annotation) or None,
-        source="flag",
-    )
-
-
-def validation_errors(model: type[BaseModel], error: ValidationError) -> list[FieldError]:
-    return [_field_error(model, item) for item in error.errors()]
-
-
 def _looks_like_flag(token: str) -> bool:
     # "-1" is a negative number, "-" conventionally means stdin.
     return token.startswith("-") and len(token) > 1 and not token[1].isdigit()
 
 
-def leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldError]:
+def _leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldError]:
     """Field errors for the tokens argparse could not place.
 
     A non-flag token right after an unknown flag is taken as that flag's value and not reported again.
@@ -210,32 +236,25 @@ def leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldErro
     return errors
 
 
-def invalid_input(field_errors: list[FieldError], native_text: str) -> ErrorReport:
-    return ErrorReport(
-        code="VALIDATION_ERROR",
-        message="invalid input",
-        exit_code=EXIT_REJECTED,
-        field_errors=field_errors,
-        native_text=native_text,
-    )
+def fail(error: Exception) -> NoReturn:
+    """Print the error object for `error` on stdout and exit with its code.
 
-
-def unrecognized_text(leftovers: list[str]) -> str:
-    """argparse's own wording for leftover tokens, used only by the string-errors ablation."""
-    return f"unrecognized arguments: {' '.join(leftovers)}"
-
-
-def usage_report(message: str) -> ErrorReport:
-    """An input error argparse found on its own, such as a flag without its value."""
-    return ErrorReport(code="VALIDATION_ERROR", message=message, exit_code=EXIT_REJECTED)
-
-
-class InputRejected(Exception):
-    """Raised inside a run when the input is rejected; carries the report to print."""
-
-    def __init__(self, report: ErrorReport) -> None:
-        super().__init__(report.message)
-        self.report = report
+    `InputRejected` and `CommandError` carry their own report. Anything else is UNKNOWN, and its traceback goes to
+    stderr when ARGD_DEBUG is on.
+    """
+    match error:
+        case InputRejected() | CommandError():
+            report = error.report
+        case _:
+            if _debug_enabled():
+                traceback.print_exception(error, file=sys.stderr)
+            message = str(error).strip() or type(error).__name__
+            report = ErrorReport(code="UNKNOWN", message=message, exit_code=EXIT_FAILED)
+    if _string_errors:
+        print(report.native_text or report.message)
+    else:
+        print(json.dumps(report.model_dump(mode="json", by_alias=True, exclude_none=True)))
+    raise SystemExit(report.exit_code)
 
 
 def _debug_enabled() -> bool:
@@ -244,29 +263,3 @@ def _debug_enabled() -> bool:
         return TypeAdapter(bool).validate_python(os.environ.get("ARGD_DEBUG", ""))
     except ValidationError:
         return False
-
-
-def unknown_failure(error: Exception) -> ErrorReport:
-    """An exception the command did not expect. The traceback goes to stderr only when ARGD_DEBUG is on."""
-    if _debug_enabled():
-        traceback.print_exception(error, file=sys.stderr)
-    return ErrorReport(code="UNKNOWN", message=str(error).strip() or type(error).__name__, exit_code=EXIT_FAILED)
-
-
-def command_failure(error: CommandError) -> ErrorReport:
-    return ErrorReport(
-        code=error.code,
-        message=error.message,
-        exit_code=error.exit_code,
-        retryable=error.retryable,
-        hint=error.hint,
-    )
-
-
-def emit(report: ErrorReport) -> NoReturn:
-    """Print the error object on stdout and exit with its code."""
-    if _string_errors:
-        print(report.native_text or report.to_dict()["message"])
-    else:
-        print(json.dumps(report.to_dict()))
-    raise SystemExit(report.exit_code)

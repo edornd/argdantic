@@ -15,19 +15,7 @@ from pydantic_settings import (
 )
 
 from argdantic.docstrings import parse_docstring
-from argdantic.errors import (
-    EXIT_OK,
-    CommandError,
-    InputRejected,
-    command_failure,
-    emit,
-    invalid_input,
-    leftover_errors,
-    unknown_failure,
-    unrecognized_text,
-    usage_report,
-    validation_errors,
-)
+from argdantic.errors import EXIT_OK, InputRejected, fail, rejected_input
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -115,11 +103,12 @@ class _Parser(argparse.ArgumentParser):
     """argparse prints usage and exits on errors; argdantic needs them as values to render."""
 
     def error(self, message: str) -> NoReturn:
-        raise InputRejected(usage_report(message))
+        raise InputRejected(message)
 
 
 def _flags(parser: argparse.ArgumentParser) -> list[str]:
     """Every flag spelling a leaf accepts, except help."""
+    # argparse has no public way to list a parser's flags, so this reads _actions and _HelpAction.
     return [
         option
         for action in parser._actions
@@ -196,12 +185,8 @@ class App:
         """Run the command named in argv (default `sys.argv[1:]`), print its result or error and exit."""
         try:
             output = self._run(argv)
-        except InputRejected as rejection:
-            emit(rejection.report)
-        except CommandError as error:
-            emit(command_failure(error))
         except Exception as error:
-            emit(unknown_failure(error))
+            fail(error)
         if output is not None:
             print(output)
         raise SystemExit(EXIT_OK)
@@ -211,8 +196,7 @@ class App:
         # argparse reads sys.argv[1:] when argv is None.
         parsed_args, leftovers = self._parser().parse_known_args(argv)
         spec: CommandSpec = parsed_args._command_spec
-        field_errors = leftover_errors(leftovers, _flags(parsed_args._leaf_parser))
-        native_texts = [unrecognized_text(leftovers)] if leftovers else []
+        valid_flags = _flags(parsed_args._leaf_parser)
         try:
             command_inputs = CliApp.run(
                 spec.model,
@@ -220,10 +204,9 @@ class App:
                 cli_settings_source=parsed_args._cli_source,
             )
         except ValidationError as error:
-            field_errors += validation_errors(spec.model, error)
-            native_texts.append(str(error))
-        if field_errors:
-            raise InputRejected(invalid_input(field_errors, "\n".join(native_texts)))
+            raise rejected_input(spec.model, leftovers, valid_flags, error) from None
+        if leftovers:
+            raise rejected_input(spec.model, leftovers, valid_flags)
         result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
         if result is None:
             return None
