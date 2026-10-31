@@ -1,10 +1,9 @@
 import argparse
 import inspect
 import json
-import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, TypeVar, overload
+from typing import Any, NoReturn, TypeVar, overload
 
 from pydantic import Field, TypeAdapter, ValidationError, create_model
 from pydantic_settings import (
@@ -13,9 +12,11 @@ from pydantic_settings import (
     CliSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
 )
 
 from argdantic.docstrings import parse_docstring
+from argdantic.errors import EXIT_OK, InputRejected, fail, rejected_input
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -99,6 +100,24 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     )
 
 
+class _Parser(argparse.ArgumentParser):
+    """argparse prints usage and exits on errors; argdantic needs them as values to render."""
+
+    def error(self, message: str) -> NoReturn:
+        raise InputRejected(message)
+
+
+def _flags(parser: argparse.ArgumentParser) -> list[str]:
+    """Every flag spelling a leaf accepts, except help."""
+    # argparse has no public way to list a parser's flags, so this reads _actions and _HelpAction.
+    return [
+        option
+        for action in parser._actions
+        if not isinstance(action, argparse._HelpAction)
+        for option in action.option_strings
+    ]
+
+
 class App:
     """A CLI: a named tree of commands that runs from an argv list."""
 
@@ -146,35 +165,50 @@ class App:
         self._commands[spec.name] = spec
 
     def _parser(self) -> argparse.ArgumentParser:
-        parser = argparse.ArgumentParser(prog=self.name)
+        # allow_abbrev=False: argparse would otherwise expand a prefix like --epo to --epochs without a word.
+        parser = _Parser(prog=self.name, allow_abbrev=False)
         subparsers = parser.add_subparsers(dest="_command_name", required=True)
         for spec in self._commands.values():
             subparser = subparsers.add_parser(
                 spec.name,
                 help=spec.summary,
                 description=spec.summary,
+                allow_abbrev=False,
             )
             subparser.set_defaults(
                 _command_spec=spec,
                 _cli_source=CliSettingsSource(spec.model, root_parser=subparser),
+                _leaf_parser=subparser,
             )
         return parser
 
-    def __call__(self, argv: Sequence[str] | None = None) -> None:
+    def __call__(self, argv: Sequence[str] | None = None) -> NoReturn:
+        """Run the command named in argv (default `sys.argv[1:]`), print its result or error and exit."""
+        try:
+            output = self._run(argv)
+        except Exception as error:
+            fail(error)
+        if output is not None:
+            print(output)
+        raise SystemExit(EXIT_OK)
+
+    def _run(self, argv: Sequence[str] | None) -> str | None:
+        """The rendered result, or None when there is nothing to print."""
         # argparse reads sys.argv[1:] when argv is None.
-        parsed_args = self._parser().parse_args(argv)
+        parsed_args, leftovers = self._parser().parse_known_args(argv)
         spec: CommandSpec = parsed_args._command_spec
+        valid_flags = _flags(parsed_args._leaf_parser)
         try:
             command_inputs = CliApp.run(
                 spec.model,
                 cli_args=parsed_args,
                 cli_settings_source=parsed_args._cli_source,
             )
-        except ValidationError as error:
-            # Plain text until structured errors land (ticket 02).
-            print(error, file=sys.stderr)
-            raise SystemExit(2) from None
+        except (ValidationError, SettingsError) as error:
+            raise rejected_input(spec.model, leftovers, valid_flags, error) from None
+        if leftovers:
+            raise rejected_input(spec.model, leftovers, valid_flags)
         result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
-        if result is not None:
-            print(json.dumps(spec.output.dump_python(result, mode="json")))
-        raise SystemExit(0)
+        if result is None:
+            return None
+        return json.dumps(spec.output.dump_python(result, mode="json"))

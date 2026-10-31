@@ -42,7 +42,7 @@ def test_parameter_without_default_is_a_required_flag(capsys: pytest.CaptureFixt
     code, out = run(app, ["double"], capsys)
 
     assert code == 2
-    assert out == ""
+    assert json.loads(out)["fieldErrors"][0]["code"] == "missing"
     assert calls == []
 
 
