@@ -1,4 +1,4 @@
-"""Error objects, exit codes and their rendering. Only `CommandError` is public."""
+"""Error objects, exit codes and their rendering. Only `CommandError` is exported from `argdantic`."""
 
 import enum
 import json

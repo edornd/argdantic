@@ -14,7 +14,8 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from argdantic._errors import (
+from argdantic.docstrings import parse_docstring
+from argdantic.errors import (
     EXIT_OK,
     CommandError,
     InputRejected,
@@ -27,7 +28,6 @@ from argdantic._errors import (
     usage_report,
     validation_errors,
 )
-from argdantic.docstrings import parse_docstring
 
 F = TypeVar("F", bound=Callable[..., Any])
 

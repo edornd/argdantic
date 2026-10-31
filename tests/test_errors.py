@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal
 import pytest
 from pydantic import BaseModel, Field, SecretBytes, SecretStr
 
-import argdantic._errors
+import argdantic.errors
 from argdantic import App, CommandError
 
 
@@ -339,7 +339,7 @@ def test_secret_fields_never_echo_the_received_value(
 
 @pytest.fixture
 def string_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(argdantic._errors, "_string_errors", True)
+    monkeypatch.setattr(argdantic.errors, "_string_errors", True)
 
 
 def run_text(app: App, argv: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, str]:
@@ -388,6 +388,6 @@ def test_string_errors_print_the_exception_text(
 
 
 def test_string_errors_switch_is_private() -> None:
-    assert argdantic._errors._string_errors is False
+    assert argdantic.errors._string_errors is False
     assert not any("string" in name for name in argdantic.__all__)
     assert not hasattr(argdantic, "_string_errors")
