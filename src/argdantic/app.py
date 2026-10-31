@@ -16,12 +16,12 @@ from pydantic_settings import (
 )
 
 from argdantic.docstrings import parse_docstring
-from argdantic.errors import EXIT_OK, InputRejected, fail, rejected_input
+from argdantic.errors import ExitCode, InputRejected, fail
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-class Command(BaseSettings):
+class InputModel(BaseSettings):
     """Base for the input model argdantic builds from a command's signature."""
 
     model_config = SettingsConfigDict(
@@ -39,13 +39,13 @@ class Command(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # No env input: CliApp.run puts the CLI source in front of these, and defaults fill the rest.
+        # no env input, only flags and defaults
         return (init_settings,)
 
 
 @dataclass(frozen=True)
 class SafetyHints:
-    """MCP-style tool annotations. Stored only; they take effect in M3."""
+    """MCP-style tool annotations. Stored, not acted on yet."""
 
     read_only: bool = False
     destructive: bool = False
@@ -59,7 +59,7 @@ class CommandSpec:
 
     name: str
     fn: Callable[..., Any]
-    model: type[Command]
+    model: type[InputModel]
     output: TypeAdapter[Any]
     hints: SafetyHints
     summary: str
@@ -69,8 +69,12 @@ def _kebab_case(name: str) -> str:
     return name.replace("_", "-")
 
 
+def _pascal_case(name: str) -> str:
+    return name.title().replace("_", "")
+
+
 def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
-    # Any callable fits the type, but the command name comes from __name__, which partials and instances lack.
+    # the command name comes from __name__, which partials and callable instances lack
     fn_name = getattr(fn, "__name__", None)
     if fn_name is None:
         raise TypeError(f"a command must be a named function, got {fn!r}")
@@ -79,14 +83,13 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     fields: dict[str, Any] = {}
     for param_name, param in signature.parameters.items():
         default = ... if param.default is param.empty else param.default
-        # A Field(description=...) in the annotation wins over the docstring, so only pass one when the
-        # docstring has it: an explicit description=None would override the annotation.
+        # Field(description=...) in the annotation wins over the docstring
         description = param_descriptions.get(param_name)
         field = Field(default) if description is None else Field(default, description=description)
         fields[param_name] = (param.annotation, field)
     model = create_model(
-        fn_name.title().replace("_", ""),
-        __base__=Command,
+        _pascal_case(fn_name),
+        __base__=InputModel,
         __doc__=summary,
         **fields,
     )
@@ -101,7 +104,7 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
 
 
 class _Parser(argparse.ArgumentParser):
-    """argparse prints usage and exits on errors; argdantic needs them as values to render."""
+    """An ArgumentParser that raises its errors instead of printing usage and exiting."""
 
     def error(self, message: str) -> NoReturn:
         raise InputRejected(message)
@@ -109,13 +112,22 @@ class _Parser(argparse.ArgumentParser):
 
 def _flags(parser: argparse.ArgumentParser) -> list[str]:
     """Every flag spelling a leaf accepts, except help."""
-    # argparse has no public way to list a parser's flags, so this reads _actions and _HelpAction.
+    # argparse has no public way to list a parser's flags
     return [
         option
         for action in parser._actions
         if not isinstance(action, argparse._HelpAction)
         for option in action.option_strings
     ]
+
+
+@dataclass(frozen=True)
+class _Leaf:
+    """What a run needs from the subparser argparse picked."""
+
+    spec: CommandSpec
+    source: CliSettingsSource[Any]
+    flags: list[str]
 
 
 class App:
@@ -156,16 +168,14 @@ class App:
         )
 
         def register(fn: F) -> F:
-            self._add(_build_spec(fn, hints))
+            spec = _build_spec(fn, hints)
+            self._commands[spec.name] = spec
             return fn
 
         return register if fn is None else register(fn)
 
-    def _add(self, spec: CommandSpec) -> None:
-        self._commands[spec.name] = spec
-
     def _parser(self) -> argparse.ArgumentParser:
-        # allow_abbrev=False: argparse would otherwise expand a prefix like --epo to --epochs without a word.
+        # allow_abbrev=False stops argparse expanding a prefix like --ti to --title
         parser = _Parser(prog=self.name, allow_abbrev=False)
         subparsers = parser.add_subparsers(dest="_command_name", required=True)
         for spec in self._commands.values():
@@ -175,11 +185,8 @@ class App:
                 description=spec.summary,
                 allow_abbrev=False,
             )
-            subparser.set_defaults(
-                _command_spec=spec,
-                _cli_source=CliSettingsSource(spec.model, root_parser=subparser),
-                _leaf_parser=subparser,
-            )
+            source = CliSettingsSource(spec.model, root_parser=subparser)
+            subparser.set_defaults(_leaf=_Leaf(spec, source, _flags(subparser)))
         return parser
 
     def __call__(self, argv: Sequence[str] | None = None) -> NoReturn:
@@ -190,25 +197,20 @@ class App:
             fail(error)
         if output is not None:
             print(output)
-        raise SystemExit(EXIT_OK)
+        raise SystemExit(ExitCode.OK)
 
     def _run(self, argv: Sequence[str] | None) -> str | None:
         """The rendered result, or None when there is nothing to print."""
-        # argparse reads sys.argv[1:] when argv is None.
         parsed_args, leftovers = self._parser().parse_known_args(argv)
-        spec: CommandSpec = parsed_args._command_spec
-        valid_flags = _flags(parsed_args._leaf_parser)
+        leaf: _Leaf = parsed_args._leaf
+        spec = leaf.spec
         try:
-            command_inputs = CliApp.run(
-                spec.model,
-                cli_args=parsed_args,
-                cli_settings_source=parsed_args._cli_source,
-            )
+            command_inputs = CliApp.run(spec.model, cli_args=parsed_args, cli_settings_source=leaf.source)
         except (ValidationError, SettingsError) as error:
-            raise rejected_input(spec.model, leftovers, valid_flags, error) from None
+            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error) from None
         if leftovers:
-            raise rejected_input(spec.model, leftovers, valid_flags)
-        result = spec.fn(**{name: getattr(command_inputs, name) for name in type(command_inputs).model_fields})
+            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags)
+        result = spec.fn(**dict(command_inputs))
         if result is None:
             return None
         return json.dumps(spec.output.dump_python(result, mode="json"))
