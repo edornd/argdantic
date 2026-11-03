@@ -218,7 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # agentic stuff
-.pi/
+.agents/
 .claude/
 AGENTS.md
 CLAUDE.md

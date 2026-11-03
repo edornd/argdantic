@@ -31,6 +31,9 @@ dev = [
     "ruff>=0.14",
     "ty==0.0.89",
 ]
+docs = [
+    "mkdocs-material>=9.8.0",
+]
 
 [tool.uv.workspace]
 members = ["bench"]
