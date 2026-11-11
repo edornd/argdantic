@@ -160,3 +160,21 @@ def test_root_help_lists_commands_with_their_summary(run: Run) -> None:
     assert result.code == 0
     assert "add" in result.out
     assert "Add a note." in result.out
+
+
+def test_field_description_wins_over_docstring(run: Run) -> None:
+    app = App("notes")
+
+    @app.command
+    def add(priority: Annotated[int, Field(description="from the field")] = 1) -> None:
+        """
+        Add a note.
+
+        Args:
+            priority: from the docstring.
+        """
+
+    result = run(app, ["add", "--help"])
+
+    assert "from the field" in result.out
+    assert "from the docstring" not in result.out
