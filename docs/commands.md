@@ -16,7 +16,7 @@ Input comes only from flags and the defaults in code. argdantic does not read en
 
 ## Help text
 
-The first line of the docstring is the command's summary, shown in `--help` for the CLI and for the command. Parameter descriptions come from the `Args:` section of a Google-style docstring, or from `Field(description=...)` in an `Annotated` type hint.
+The first line of the docstring is the command's summary, shown in `--help` for the CLI and for the command. Parameter descriptions come from the `Args:` section of a Google-style docstring, or from `Field(description=...)` in an `Annotated` type hint. When both are set, the `Field` wins.
 
 ## Results
 

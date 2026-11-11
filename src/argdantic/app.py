@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, NoReturn, TypeVar, overload
 
 from pydantic import Field, TypeAdapter, ValidationError, create_model
+from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
     CliApp,
@@ -84,7 +85,8 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     for param_name, param in signature.parameters.items():
         default = ... if param.default is param.empty else param.default
         # Field(description=...) in the annotation wins over the docstring
-        description = param_descriptions.get(param_name)
+        annotated = FieldInfo.from_annotation(param.annotation).description
+        description = None if annotated else param_descriptions.get(param_name)
         field = Field(default) if description is None else Field(default, description=description)
         fields[param_name] = (param.annotation, field)
     model = create_model(
