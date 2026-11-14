@@ -55,7 +55,7 @@ def test_parameter_without_default_is_a_required_flag(run: Run) -> None:
     result = run(app, ["double"])
 
     assert result.code == 2
-    assert result.json()["fieldErrors"][0]["code"] == "missing"
+    assert result.json()["field_errors"][0]["code"] == "missing"
     assert calls == []
 
 
@@ -75,7 +75,7 @@ def test_validation_failure_gives_one_field_error_per_pydantic_error(run: Run) -
         "code": "VALIDATION_ERROR",
         "message": "invalid input",
         "retryable": False,
-        "fieldErrors": [
+        "field_errors": [
             {
                 "path": "title",
                 "code": "missing",
@@ -115,7 +115,7 @@ def test_choice_errors_list_the_allowed_values(argv: list[str], expected: dict[s
     result = run(app, ["export", *argv])
 
     assert result.code == 2
-    [field_error] = result.json()["fieldErrors"]
+    [field_error] = result.json()["field_errors"]
     assert {key: field_error[key] for key in expected} == expected
     assert field_error["source"] == "flag"
     assert field_error["received"] == argv[1]
@@ -140,7 +140,7 @@ def test_unknown_flag_lists_the_valid_flags(
     assert result.code == 2
     assert calls == []
     assert result.json()["code"] == "VALIDATION_ERROR"
-    assert result.json()["fieldErrors"] == [
+    assert result.json()["field_errors"] == [
         {
             "path": path,
             "code": "unknown_flag",
@@ -157,7 +157,7 @@ def test_stray_token_is_an_unexpected_argument(notes_app: App, calls: list[str],
 
     assert result.code == 2
     assert calls == []
-    assert result.json()["fieldErrors"] == [
+    assert result.json()["field_errors"] == [
         {
             "path": "",
             "code": "unexpected_argument",
@@ -178,7 +178,7 @@ def test_separator_and_negative_numbers_are_not_flags(
     result = run(notes_app, ["add", *argv])
 
     assert result.code == 2
-    assert [(item["code"], item["received"]) for item in result.json()["fieldErrors"]] == [
+    assert [(item["code"], item["received"]) for item in result.json()["field_errors"]] == [
         ("unexpected_argument", token) for token in tokens
     ]
 
@@ -187,7 +187,7 @@ def test_unknown_flags_come_before_validation_errors(notes_app: App, run: Run) -
     result = run(notes_app, ["add", "--priority", "abc", "--bogus"])
 
     assert result.code == 2
-    assert [(item["path"], item["code"]) for item in result.json()["fieldErrors"]] == [
+    assert [(item["path"], item["code"]) for item in result.json()["field_errors"]] == [
         ("bogus", "unknown_flag"),
         ("priority", "int_parsing"),
     ]
@@ -228,7 +228,7 @@ def test_malformed_structured_value_is_a_validation_error(argv: list[str], field
     assert calls == []
     assert result.json()["code"] == "VALIDATION_ERROR"
     assert field in result.json()["message"]
-    assert "fieldErrors" not in result.json()
+    assert "field_errors" not in result.json()
 
 
 @pytest.mark.parametrize(
@@ -252,7 +252,7 @@ def test_secret_fields_never_echo_the_received_value(argv: list[str], path: str,
     result = run(app, ["login", *argv])
 
     assert result.code == 2
-    [field_error] = result.json()["fieldErrors"]
+    [field_error] = result.json()["field_errors"]
     assert field_error["path"] == path
     assert "received" not in field_error
     assert "abc" not in json.dumps(result.json())
@@ -289,5 +289,5 @@ def test_received_is_hidden_for_secrets_and_unresolved_paths(
     result = run(app, ["login", *argv])
 
     assert result.code == 2
-    [field_error] = [item for item in result.json()["fieldErrors"] if item["path"] == path]
+    [field_error] = [item for item in result.json()["field_errors"] if item["path"] == path]
     assert field_error.get("received") == received

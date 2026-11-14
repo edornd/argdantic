@@ -12,10 +12,6 @@ from pydantic.fields import FieldInfo
 from pydantic_core import ErrorDetails
 from pydantic_settings import SettingsError
 
-# bench-only switch for the structured-vs-string errors ablation, not public API
-_string_errors = False
-
-_SCREAMING_CASE = re.compile(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*")
 _NEGATIVE_NUMBER = re.compile(r"-\.?\d")
 
 
@@ -44,14 +40,12 @@ class ErrorReport(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    code: str
+    code: str = Field(pattern=r"^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$")
     message: str
     retryable: bool = False
     hint: str | None = None
-    field_errors: list[FieldError] | None = Field(default=None, serialization_alias="fieldErrors")
+    field_errors: list[FieldError] | None = None
     exit_code: int = Field(exclude=True)
-    # what pydantic or argparse print on their own, shown only by the string-errors switch
-    native_text: str | None = Field(default=None, exclude=True)
 
     @field_validator("message")
     @classmethod
@@ -79,41 +73,19 @@ class CommandError(Exception):
         hint: str | None = None,
         exit_code: int = ExitCode.FAILED,
     ) -> None:
-        if not _SCREAMING_CASE.fullmatch(code):
-            raise ValueError(f"error code must be SCREAMING_CASE, got {code!r}")
         if exit_code in (ExitCode.OK, ExitCode.REJECTED):
             raise ValueError(f"exit code {exit_code} is reserved for success and rejected input")
         super().__init__(message)
-        self.code = code
-        self.message = message
-        self.retryable = retryable
-        self.hint = hint
-        self.exit_code = exit_code
-
-    @property
-    def report(self) -> ErrorReport:
-        return ErrorReport(
-            code=self.code,
-            message=self.message,
-            retryable=self.retryable,
-            hint=self.hint,
-            exit_code=self.exit_code,
-        )
+        self.report = ErrorReport(code=code, message=message, retryable=retryable, hint=hint, exit_code=exit_code)
 
 
 class InputRejected(Exception):
     """Raised inside a run when the input is rejected, before the command is called."""
 
-    def __init__(
-        self,
-        message: str,
-        field_errors: list[FieldError] | None = None,
-        native_text: str | None = None,
-    ) -> None:
+    def __init__(self, message: str, field_errors: list[FieldError] | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.field_errors = field_errors or None
-        self.native_text = native_text
 
     @classmethod
     def from_parse(
@@ -125,14 +97,12 @@ class InputRejected(Exception):
     ) -> Self:
         """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors."""
         field_errors = _leftover_errors(leftovers, valid_flags)
-        native_texts = [f"unrecognized arguments: {' '.join(leftovers)}"] if leftovers else []
         if isinstance(error, SettingsError):
             # malformed JSON in a structured flag, pydantic-settings names the field only in its message
-            return cls(str(error), field_errors, "\n".join([*native_texts, str(error)]))
+            return cls(str(error), field_errors)
         if error is not None:
             field_errors += [_field_error(model, item) for item in error.errors()]
-            native_texts.append(str(error))
-        return cls("invalid input", field_errors, "\n".join(native_texts))
+        return cls("invalid input", field_errors)
 
     @property
     def report(self) -> ErrorReport:
@@ -141,7 +111,6 @@ class InputRejected(Exception):
             message=self.message,
             field_errors=self.field_errors,
             exit_code=ExitCode.REJECTED,
-            native_text=self.native_text,
         )
 
 
@@ -289,10 +258,7 @@ def fail(error: Exception) -> NoReturn:
                 traceback.print_exception(error, file=sys.stderr)
             message = str(error).strip() or type(error).__name__
             report = ErrorReport(code="UNKNOWN", message=message, exit_code=ExitCode.FAILED)
-    if _string_errors:
-        print(report.native_text or report.message)
-    else:
-        print(json.dumps(report.model_dump(mode="json", by_alias=True, exclude_none=True)))
+    print(json.dumps(report.model_dump(mode="json", exclude_none=True)))
     raise SystemExit(report.exit_code)
 
 

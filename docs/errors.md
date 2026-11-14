@@ -16,7 +16,7 @@ A run prints exactly one JSON document on stdout: the result when it succeeds, a
 | `message` | string | One line for the reader. The wording may change; do not match on it. |
 | `retryable` | bool | Whether the same call may succeed if tried again. |
 | `hint` | string, optional | What the caller can do about it. |
-| `fieldErrors` | list, optional | One entry per problem with an input value. |
+| `field_errors` | list, optional | One entry per problem with an input value. |
 
 Each field error has these keys:
 
@@ -36,14 +36,14 @@ Invalid input gives `VALIDATION_ERROR` and exit code 2, with every problem liste
 
 ```console
 $ python notes.py add --title milk --colour red
-{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "fieldErrors": [{"path": "colour", "code": "unknown_flag", "message": "unknown flag --colour", "received": "--colour", "allowed": ["--title", "--priority"], "source": "flag"}]}
+{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "field_errors": [{"path": "colour", "code": "unknown_flag", "message": "unknown flag --colour", "received": "--colour", "allowed": ["--title", "--priority"], "source": "flag"}]}
 ```
 
 A value outside a `Literal` lists the accepted values:
 
 ```console
 $ python notes.py remove --title milk --scope everyone
-{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "fieldErrors": [{"path": "scope", "code": "literal_error", "message": "Input should be 'mine' or 'all'", "expected": "'mine' or 'all'", "received": "everyone", "allowed": ["mine", "all"], "source": "flag"}]}
+{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "field_errors": [{"path": "scope", "code": "literal_error", "message": "Input should be 'mine' or 'all'", "expected": "'mine' or 'all'", "received": "everyone", "allowed": ["mine", "all"], "source": "flag"}]}
 ```
 
 ## Failures in a command

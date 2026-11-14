@@ -55,7 +55,7 @@ A wrong value prints an error instead of a result, and exits with code 2:
 
 ```console
 $ python notes.py add --title milk --priority high
-{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "fieldErrors": [{"path": "priority", "code": "int_parsing", "message": "Input should be a valid integer, unable to parse string as an integer", "received": "high", "source": "flag"}]}
+{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "field_errors": [{"path": "priority", "code": "int_parsing", "message": "Input should be a valid integer, unable to parse string as an integer", "received": "high", "source": "flag"}]}
 ```
 
 `app()` reads `sys.argv`. To run it on a fixed list, pass it in: `app(["add", "--title", "milk"])`. Either way, `app()` exits the process with the run's exit code.
