@@ -24,6 +24,20 @@ class Credentials(BaseModel):
     api_key: Annotated[SecretBytes, Field(min_length=8)]
 
 
+class Login(BaseModel):
+    token: Annotated[SecretStr, Field(alias="apiToken", min_length=8)]
+    retries: Annotated[int, Field(alias="maxRetries")] = 1
+
+
+class Adam(BaseModel):
+    lr: float
+
+
+class Sgd(BaseModel):
+    momentum: float
+
+
+Token = Annotated[SecretStr, Field(min_length=8)]
 DEFAULT_STYLE = Style()
 DEFAULT_CREDENTIALS = Credentials(api_key=SecretBytes(b"a-long-enough-key"))
 DEFAULT_TOKEN = SecretStr("a-long-enough-token")
@@ -242,3 +256,38 @@ def test_secret_fields_never_echo_the_received_value(argv: list[str], path: str,
     assert field_error["path"] == path
     assert "received" not in field_error
     assert "abc" not in json.dumps(result.json())
+
+
+@pytest.mark.parametrize(
+    ("argv", "path", "received"),
+    [
+        (["--creds.apiToken", "short"], "creds.apiToken", None),
+        (["--creds", '{"apiToken": "short"}'], "creds.apiToken", None),
+        (["--creds", '{"apiToken": "long-enough", "maxRetries": "x"}'], "creds.maxRetries", "x"),
+        (["--pair", '[1, "short"]'], "pair.1", None),
+        (["--pair", '["x", "long-enough"]'], "pair.0", "x"),
+        (["--tokens", '["long-enough", "short"]'], "tokens.1", None),
+        (["--vault", '{"a": "short"}'], "vault.a", None),
+        # pydantic names the union member in the path, the walk can't follow it and hides the value
+        (["--optim", '{"lr": "x"}'], "optim.Adam.lr", None),
+    ],
+)
+def test_received_is_hidden_for_secrets_and_unresolved_paths(
+    argv: list[str], path: str, received: str | None, run: Run
+) -> None:
+    app = App("auth")
+
+    @app.command
+    def login(
+        creds: Login | None = None,
+        pair: tuple[int, Token] | None = None,
+        tokens: tuple[Token, ...] = (),
+        vault: dict[str, Token] | None = None,
+        optim: Adam | Sgd | None = None,
+    ) -> None: ...
+
+    result = run(app, ["login", *argv])
+
+    assert result.code == 2
+    [field_error] = [item for item in result.json()["fieldErrors"] if item["path"] == path]
+    assert field_error.get("received") == received

@@ -8,6 +8,7 @@ import types
 from typing import Annotated, Any, Literal, NoReturn, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, SecretBytes, SecretStr, TypeAdapter, ValidationError, field_validator
+from pydantic.fields import FieldInfo
 from pydantic_core import ErrorDetails
 from pydantic_settings import SettingsError
 
@@ -155,7 +156,8 @@ def _field_error(model: type[BaseModel], error: ErrorDetails) -> FieldError:
         code=error["type"],
         message=error["msg"],
         expected=error.get("ctx", {}).get("expected"),
-        received=None if _is_secret(annotation) else error["input"],
+        # an unresolved path counts as secret, so a type the walk does not understand can't leak its value
+        received=None if annotation is None or _is_secret(annotation) else error["input"],
         allowed=_choices(annotation) or None,
         source="flag",
     )
@@ -172,22 +174,45 @@ def _unwrap_annotated(annotation: Any) -> Any:
 
 
 def _annotation_at(model: type[BaseModel], loc: tuple[int | str, ...]) -> Any:
-    """The annotation of the input at `loc`, or None when the path leaves the declared types."""
+    """The annotation of the input at `loc`, or None when the walk can't resolve it. Callers treat None as secret."""
     annotation: Any = model
     for part in loc:
-        annotation = _unwrap_annotated(annotation)
+        annotation = _unwrap_optional(annotation)
+        origin, args = get_origin(annotation), get_args(annotation)
         if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-            field_info = annotation.model_fields.get(str(part))
-            if field_info is None:
-                return None
-            annotation = field_info.annotation
-        elif get_origin(annotation) in (list, tuple, set, frozenset) and get_args(annotation):
-            annotation = get_args(annotation)[0]
-        elif get_origin(annotation) is dict and get_args(annotation):
-            annotation = get_args(annotation)[1]
+            field_info = _model_field(annotation, str(part))
+            annotation = field_info.annotation if field_info else None
+        elif origin is tuple and len(args) == 2 and args[1] is Ellipsis:
+            annotation = args[0]
+        elif origin is tuple and isinstance(part, int) and 0 <= part < len(args):
+            annotation = args[part]
+        elif origin in (list, set, frozenset) and args:
+            annotation = args[0]
+        elif origin is dict and args:
+            annotation = args[1]
         else:
             return None
+        if annotation is None:
+            return None
     return annotation
+
+
+def _unwrap_optional(annotation: Any) -> Any:
+    """`X | None` and `Annotated` stripped down to `X`. Pydantic puts no member tag in `loc` for them."""
+    while True:
+        annotation = _unwrap_annotated(annotation)
+        members = [member for member in get_args(annotation) if member is not type(None)]
+        if get_origin(annotation) not in (Union, types.UnionType) or len(members) != 1:
+            return annotation
+        annotation = members[0]
+
+
+def _model_field(model: type[BaseModel], part: str) -> FieldInfo | None:
+    """The field `loc` names with `part`: pydantic reports the alias when there is one."""
+    for name, field_info in model.model_fields.items():
+        if part in (field_info.alias, field_info.validation_alias, name):
+            return field_info
+    return None
 
 
 def _choices(annotation: Any) -> list[Any]:
