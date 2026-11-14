@@ -1,10 +1,12 @@
 import enum
 import json
-from typing import Annotated, Any, Literal
+import sys
+import typing
+from typing import Annotated, Any, Literal, Self
 
 import pytest
 from conftest import Run
-from pydantic import BaseModel, Field, SecretBytes, SecretStr
+from pydantic import BaseModel, Field, Secret, SecretBytes, SecretStr, model_validator
 
 from argdantic import App
 
@@ -27,6 +29,15 @@ class Credentials(BaseModel):
 class Login(BaseModel):
     token: Annotated[SecretStr, Field(alias="apiToken", min_length=8)]
     retries: Annotated[int, Field(alias="maxRetries")] = 1
+
+
+class Account(BaseModel):
+    user: str
+    password: SecretStr
+
+    @model_validator(mode="after")
+    def _known_user(self) -> Self:
+        raise ValueError("unknown user")
 
 
 class Adam(BaseModel):
@@ -291,3 +302,45 @@ def test_received_is_hidden_for_secrets_and_unresolved_paths(
     assert result.code == 2
     [field_error] = [item for item in result.json()["field_errors"] if item["path"] == path]
     assert field_error.get("received") == received
+
+
+@pytest.mark.parametrize(
+    ("argv", "path"),
+    [
+        (["--account", '{"user": "bob", "password": "hunter22"}'], "account"),
+        (["--keys", '["hunter22", "hunter23"]'], "keys"),
+        (["--pair", '[1, "hunter22", "extra"]'], "pair"),
+        (["--pin", "hunter22"], "pin"),
+    ],
+)
+def test_errors_on_a_value_holding_a_secret_hide_it(argv: list[str], path: str, run: Run) -> None:
+    app = App("auth")
+
+    @app.command
+    def login(
+        account: Account | None = None,
+        keys: Annotated[list[SecretStr], Field(max_length=1)] = [],  # noqa: B006
+        pair: tuple[int, SecretStr] | None = None,
+        pin: Secret[int] | None = None,
+    ) -> None: ...
+
+    result = run(app, ["login", *argv])
+
+    assert result.code == 2
+    [field_error] = [item for item in result.json()["field_errors"] if item["path"] == path]
+    assert "received" not in field_error
+    assert "hunter22" not in result.out
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="typing.TypeAliasType is new in 3.12")
+def test_secret_behind_a_type_alias_is_hidden(run: Run) -> None:
+    token = typing.TypeAliasType("Token", Annotated[SecretStr, Field(min_length=8)])  # ty: ignore[unresolved-attribute]
+    app = App("auth")
+
+    @app.command
+    def login(token: token | None = None) -> None: ...
+
+    result = run(app, ["login", "--token", "short"])
+
+    assert result.code == 2
+    assert "received" not in result.json()["field_errors"][0]

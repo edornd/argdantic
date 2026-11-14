@@ -5,14 +5,27 @@ import re
 import sys
 import traceback
 import types
+import typing
 from typing import Annotated, Any, Literal, NoReturn, Self, Union, get_args, get_origin
 
-from pydantic import BaseModel, ConfigDict, Field, SecretBytes, SecretStr, TypeAdapter, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    Secret,
+    SecretBytes,
+    SecretStr,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+)
 from pydantic.fields import FieldInfo
 from pydantic_core import ErrorDetails
 from pydantic_settings import SettingsError
 
 _NEGATIVE_NUMBER = re.compile(r"-\.?\d")
+# `type X = ...` aliases exist from 3.12, an empty tuple matches nothing on 3.11
+_TYPE_ALIAS: Any = getattr(typing, "TypeAliasType", ())
 
 
 class ExitCode(enum.IntEnum):
@@ -126,7 +139,7 @@ def _field_error(model: type[BaseModel], error: ErrorDetails) -> FieldError:
         message=error["msg"],
         expected=error.get("ctx", {}).get("expected"),
         # an unresolved path counts as secret, so a type the walk does not understand can't leak its value
-        received=None if annotation is None or _is_secret(annotation) else error["input"],
+        received=None if annotation is None or _holds_secret(annotation) else error["input"],
         allowed=_choices(annotation) or None,
         source="flag",
     )
@@ -137,8 +150,9 @@ def _dotted(loc: tuple[int | str, ...]) -> str:
 
 
 def _unwrap_annotated(annotation: Any) -> Any:
-    while get_origin(annotation) is Annotated:
-        annotation = get_args(annotation)[0]
+    """`Annotated` metadata and `type` aliases stripped down to the type they name."""
+    while get_origin(annotation) is Annotated or isinstance(annotation, _TYPE_ALIAS):
+        annotation = annotation.__value__ if isinstance(annotation, _TYPE_ALIAS) else get_args(annotation)[0]
     return annotation
 
 
@@ -196,11 +210,19 @@ def _choices(annotation: Any) -> list[Any]:
     return []
 
 
-def _is_secret(annotation: Any) -> bool:
+def _holds_secret(annotation: Any, seen: frozenset[type] = frozenset()) -> bool:
+    """Whether a value of this type is or contains a secret, since an error on a container echoes all of it."""
     annotation = _unwrap_annotated(annotation)
-    if get_origin(annotation) in (Union, types.UnionType):
-        return any(_is_secret(member) for member in get_args(annotation))
-    return isinstance(annotation, type) and issubclass(annotation, SecretStr | SecretBytes)
+    if isinstance(annotation, type) and issubclass(annotation, SecretStr | SecretBytes):
+        return True
+    if get_origin(annotation) is Secret:
+        return True
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        # `seen` stops recursive models
+        return annotation not in seen and any(
+            _holds_secret(field.annotation, seen | {annotation}) for field in annotation.model_fields.values()
+        )
+    return any(_holds_secret(arg, seen) for arg in get_args(annotation))
 
 
 def _looks_like_flag(token: str) -> bool:
