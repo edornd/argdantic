@@ -3,7 +3,7 @@ import inspect
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, NoReturn, TypeVar, overload
+from typing import Annotated, Any, NoReturn, TypeVar, overload
 
 from pydantic import Field, TypeAdapter, ValidationError, create_model
 from pydantic.fields import FieldInfo
@@ -84,11 +84,14 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     fields: dict[str, Any] = {}
     for param_name, param in signature.parameters.items():
         default = ... if param.default is param.empty else param.default
-        # Field(description=...) in the annotation wins over the docstring
-        annotated = FieldInfo.from_annotation(param.annotation).description
-        description = None if annotated else param_descriptions.get(param_name)
-        field = Field(default) if description is None else Field(default, description=description)
-        fields[param_name] = (param.annotation, field)
+        # a `Field(...)` default holds the field's settings, as it does in a pydantic model
+        field = default if isinstance(default, FieldInfo) else Field(default)
+        annotation = param.annotation
+        # Field(description=...) in the annotation or the default wins over the docstring
+        described = FieldInfo.from_annotation(annotation).description or field.description
+        if not described and param_name in param_descriptions:
+            annotation = Annotated[annotation, Field(description=param_descriptions[param_name])]
+        fields[param_name] = (annotation, field)
     model = create_model(
         _pascal_case(fn_name),
         __base__=InputModel,
