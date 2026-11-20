@@ -16,7 +16,7 @@ A run prints exactly one JSON document on stdout: the result when it succeeds, a
 | `message` | string | One line for the reader. The wording may change; do not match on it. |
 | `retryable` | bool | Whether the same call may succeed if tried again. |
 | `hint` | string, optional | What the caller can do about it. |
-| `fieldErrors` | list, optional | One entry per problem with an input value. |
+| `field_errors` | list, optional | One entry per problem with an input value. |
 
 Each field error has these keys:
 
@@ -26,7 +26,7 @@ Each field error has these keys:
 | `code` | string | The error type: pydantic's own (`missing`, `int_parsing`, `literal_error`), or `unknown_flag` and `unexpected_argument`. |
 | `message` | string | One line for the reader. |
 | `expected` | string, optional | What the input should look like. |
-| `received` | any, optional | The value given. Omitted for `SecretStr` and `SecretBytes` inputs. |
+| `received` | any, optional | The value given. Omitted when the value is or holds a secret, see [Secrets](#secrets). |
 | `allowed` | list, optional | The accepted values: the choices of a `Literal` or an enum, or the valid flags for an unknown flag. |
 | `source` | string, optional | Where the value came from. Currently always `flag`. |
 
@@ -36,15 +36,23 @@ Invalid input gives `VALIDATION_ERROR` and exit code 2, with every problem liste
 
 ```console
 $ python notes.py add --title milk --colour red
-{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "fieldErrors": [{"path": "colour", "code": "unknown_flag", "message": "unknown flag --colour", "received": "--colour", "allowed": ["--title", "--priority"], "source": "flag"}]}
+{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "field_errors": [{"path": "colour", "code": "unknown_flag", "message": "unknown flag --colour", "received": "--colour", "allowed": ["--title", "--priority"], "source": "flag"}]}
 ```
 
 A value outside a `Literal` lists the accepted values:
 
 ```console
 $ python notes.py remove --title milk --scope everyone
-{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "fieldErrors": [{"path": "scope", "code": "literal_error", "message": "Input should be 'mine' or 'all'", "expected": "'mine' or 'all'", "received": "everyone", "allowed": ["mine", "all"], "source": "flag"}]}
+{"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "field_errors": [{"path": "scope", "code": "literal_error", "message": "Input should be 'mine' or 'all'", "expected": "'mine' or 'all'", "received": "everyone", "allowed": ["mine", "all"], "source": "flag"}]}
 ```
+
+## Secrets
+
+A field error has no `received` when the rejected value is or holds a `SecretStr`, `SecretBytes` or `Secret`, subclasses included. A model with a password field whose own validator fails has no `received`, because it would echo the password.
+
+argdantic also omits `received` when it can't trace the rejected value to a type, such as a field inside a discriminated union.
+
+A custom type that validates as a secret through `__get_pydantic_core_schema__` is not detected. Subclass `SecretStr` or `Secret` instead.
 
 ## Failures in a command
 

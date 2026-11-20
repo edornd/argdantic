@@ -1,10 +1,16 @@
+import dataclasses
 import enum
 import json
-from typing import Annotated, Any, Literal
+import sys
+import typing
+from collections.abc import Sequence
+from typing import Annotated, Any, Literal, NamedTuple, Self
 
 import pytest
+import typing_extensions
 from conftest import Run
-from pydantic import BaseModel, Field, SecretBytes, SecretStr
+from pydantic import AfterValidator, BaseModel, Field, RootModel, Secret, SecretBytes, SecretStr, model_validator
+from typing_extensions import TypedDict
 
 from argdantic import App
 
@@ -24,6 +30,76 @@ class Credentials(BaseModel):
     api_key: Annotated[SecretBytes, Field(min_length=8)]
 
 
+class Login(BaseModel):
+    token: Annotated[SecretStr, Field(alias="apiToken", min_length=8)]
+    retries: Annotated[int, Field(alias="maxRetries")] = 1
+
+
+class Account(BaseModel):
+    user: str
+    password: SecretStr
+
+    @model_validator(mode="after")
+    def _known_user(self) -> Self:
+        raise ValueError("unknown user")
+
+
+Token = Annotated[SecretStr, Field(min_length=8)]
+
+
+class Adam(BaseModel):
+    kind: Literal["adam"] = "adam"
+    lr: float
+    key: Token | None = None
+
+
+class Sgd(BaseModel):
+    kind: Literal["sgd"] = "sgd"
+    momentum: float
+
+
+@dataclasses.dataclass
+class Db:
+    host: str
+    password: SecretStr
+    port: int = 5432
+
+    def __post_init__(self) -> None:
+        if self.host == "bad":
+            raise ValueError("unknown host")
+
+
+class Vault(TypedDict):
+    name: str
+    secret: SecretStr
+
+
+class Pair(NamedTuple):
+    user: str
+    password: SecretStr
+
+
+def _known(value: Any) -> Any:
+    if "bad" in (value["name"] if isinstance(value, dict) else value.user):
+        raise ValueError("unknown name")
+    return value
+
+
+class Pin(Secret[int]):
+    pass
+
+
+class Ports(RootModel[list[int]]):
+    pass
+
+
+class Node(BaseModel):
+    name: str
+    child: "Node | None" = None
+
+
+Json = typing_extensions.TypeAliasType("Json", "list[Json] | int")
+Wallet = typing_extensions.TypeAliasType("Wallet", "list[SecretStr]")
 DEFAULT_STYLE = Style()
 DEFAULT_CREDENTIALS = Credentials(api_key=SecretBytes(b"a-long-enough-key"))
 DEFAULT_TOKEN = SecretStr("a-long-enough-token")
@@ -41,7 +117,7 @@ def test_parameter_without_default_is_a_required_flag(run: Run) -> None:
     result = run(app, ["double"])
 
     assert result.code == 2
-    assert result.json()["fieldErrors"][0]["code"] == "missing"
+    assert result.json()["field_errors"][0]["code"] == "missing"
     assert calls == []
 
 
@@ -61,7 +137,7 @@ def test_validation_failure_gives_one_field_error_per_pydantic_error(run: Run) -
         "code": "VALIDATION_ERROR",
         "message": "invalid input",
         "retryable": False,
-        "fieldErrors": [
+        "field_errors": [
             {
                 "path": "title",
                 "code": "missing",
@@ -101,7 +177,7 @@ def test_choice_errors_list_the_allowed_values(argv: list[str], expected: dict[s
     result = run(app, ["export", *argv])
 
     assert result.code == 2
-    [field_error] = result.json()["fieldErrors"]
+    [field_error] = result.json()["field_errors"]
     assert {key: field_error[key] for key in expected} == expected
     assert field_error["source"] == "flag"
     assert field_error["received"] == argv[1]
@@ -126,7 +202,7 @@ def test_unknown_flag_lists_the_valid_flags(
     assert result.code == 2
     assert calls == []
     assert result.json()["code"] == "VALIDATION_ERROR"
-    assert result.json()["fieldErrors"] == [
+    assert result.json()["field_errors"] == [
         {
             "path": path,
             "code": "unknown_flag",
@@ -143,7 +219,7 @@ def test_stray_token_is_an_unexpected_argument(notes_app: App, calls: list[str],
 
     assert result.code == 2
     assert calls == []
-    assert result.json()["fieldErrors"] == [
+    assert result.json()["field_errors"] == [
         {
             "path": "",
             "code": "unexpected_argument",
@@ -164,7 +240,7 @@ def test_separator_and_negative_numbers_are_not_flags(
     result = run(notes_app, ["add", *argv])
 
     assert result.code == 2
-    assert [(item["code"], item["received"]) for item in result.json()["fieldErrors"]] == [
+    assert [(item["code"], item["received"]) for item in result.json()["field_errors"]] == [
         ("unexpected_argument", token) for token in tokens
     ]
 
@@ -173,7 +249,7 @@ def test_unknown_flags_come_before_validation_errors(notes_app: App, run: Run) -
     result = run(notes_app, ["add", "--priority", "abc", "--bogus"])
 
     assert result.code == 2
-    assert [(item["path"], item["code"]) for item in result.json()["fieldErrors"]] == [
+    assert [(item["path"], item["code"]) for item in result.json()["field_errors"]] == [
         ("bogus", "unknown_flag"),
         ("priority", "int_parsing"),
     ]
@@ -214,7 +290,7 @@ def test_malformed_structured_value_is_a_validation_error(argv: list[str], field
     assert calls == []
     assert result.json()["code"] == "VALIDATION_ERROR"
     assert field in result.json()["message"]
-    assert "fieldErrors" not in result.json()
+    assert "field_errors" not in result.json()
 
 
 @pytest.mark.parametrize(
@@ -238,7 +314,143 @@ def test_secret_fields_never_echo_the_received_value(argv: list[str], path: str,
     result = run(app, ["login", *argv])
 
     assert result.code == 2
-    [field_error] = result.json()["fieldErrors"]
+    [field_error] = result.json()["field_errors"]
     assert field_error["path"] == path
     assert "received" not in field_error
     assert "abc" not in json.dumps(result.json())
+
+
+@pytest.mark.parametrize(
+    ("argv", "path", "received"),
+    [
+        (["--creds.apiToken", "short"], "creds.apiToken", None),
+        (["--creds", '{"apiToken": "short"}'], "creds.apiToken", None),
+        (["--creds", '{"apiToken": "long-enough", "maxRetries": "x"}'], "creds.maxRetries", "x"),
+        (["--pair", '[1, "short"]'], "pair.1", None),
+        (["--pair", '["x", "long-enough"]'], "pair.0", "x"),
+        (["--tokens", '["long-enough", "short"]'], "tokens.1", None),
+        (["--vault", '{"a": "short"}'], "vault.a", None),
+        # pydantic names the union member in the path by its class name
+        (["--optim", '{"lr": "x"}'], "optim.Adam.lr", "x"),
+        (["--optim", '{"lr": 1, "key": "short"}'], "optim.Adam.key", None),
+        # a discriminator value names no class: the walk follows every member and one can't resolve `lr`
+        (["--tuned", '{"kind": "adam", "lr": "x"}'], "tuned.adam.lr", None),
+        # the walk does not expand a type alias whose value is a string
+        (["--meta", '"x"'], "meta.int", None),
+    ],
+)
+def test_received_is_hidden_for_secrets_and_unresolved_paths(
+    argv: list[str], path: str, received: str | None, run: Run
+) -> None:
+    app = App("auth")
+
+    @app.command
+    def login(
+        creds: Login | None = None,
+        pair: tuple[int, Token] | None = None,
+        tokens: tuple[Token, ...] = (),
+        vault: dict[str, Token] | None = None,
+        optim: Adam | Sgd | None = None,
+        tuned: Annotated[Adam | Sgd, Field(discriminator="kind")] | None = None,
+        meta: Json | None = None,
+    ) -> None: ...
+
+    result = run(app, ["login", *argv])
+
+    assert result.code == 2
+    [field_error] = [item for item in result.json()["field_errors"] if item["path"] == path]
+    assert field_error.get("received") == received
+
+
+@pytest.mark.parametrize(
+    ("argv", "path"),
+    [
+        (["--account", '{"user": "bob", "password": "hunter22"}'], "account"),
+        (["--keys", '["hunter22", "hunter23"]'], "keys"),
+        (["--pair", '[1, "hunter22", "extra"]'], "pair"),
+        (["--pin", "hunter22"], "pin"),
+        (["--pin-code", "hunter22"], "pin_code"),
+        (["--db", '{"host": "bad", "password": "hunter22"}'], "db"),
+        (["--vault", '{"name": "bad", "secret": "hunter22"}'], "vault"),
+        (["--login", '["bad", "hunter22"]'], "login"),
+        (["--wallet", '["hunter22", "hunter23"]'], "wallet"),
+    ],
+)
+def test_errors_on_a_value_holding_a_secret_hide_it(argv: list[str], path: str, run: Run) -> None:
+    app = App("auth")
+
+    @app.command
+    def login(
+        account: Account | None = None,
+        keys: Annotated[list[SecretStr], Field(max_length=1)] = [],  # noqa: B006
+        pair: tuple[int, SecretStr] | None = None,
+        pin: Secret[int] | None = None,
+        pin_code: Pin | None = None,
+        db: Db | None = None,
+        vault: Annotated[Vault, AfterValidator(_known)] | None = None,
+        login: Annotated[Pair, AfterValidator(_known)] | None = None,
+        wallet: Annotated[Wallet, Field(max_length=1)] | None = None,
+    ) -> None: ...
+
+    result = run(app, ["login", *argv])
+
+    assert result.code == 2
+    [field_error] = [item for item in result.json()["field_errors"] if item["path"] == path]
+    assert "received" not in field_error
+    assert "hunter22" not in result.out
+
+
+@pytest.mark.parametrize(
+    "alias_type",
+    [
+        typing_extensions.TypeAliasType,
+        pytest.param(
+            getattr(typing, "TypeAliasType", None),
+            marks=pytest.mark.skipif(sys.version_info < (3, 12), reason="typing.TypeAliasType is new in 3.12"),
+        ),
+    ],
+)
+def test_secret_behind_a_type_alias_is_hidden(alias_type: Any, run: Run) -> None:
+    token = alias_type("Token", Annotated[SecretStr, Field(min_length=8)])
+    app = App("auth")
+
+    @app.command
+    def login(token: token | None = None) -> None: ...
+
+    result = run(app, ["login", "--token", "short"])
+
+    assert result.code == 2
+    assert "received" not in result.json()["field_errors"][0]
+
+
+@pytest.mark.parametrize(
+    ("argv", "path", "received"),
+    [
+        (["--db", '{"host": "h", "password": "p", "port": "x"}'], "db.port", "x"),
+        (["--vault", '{"name": 1, "secret": "p"}'], "vault.name", 1),
+        (["--login", '[1, "p"]'], "login.0", 1),
+        (["--login", '{"user": 1, "password": "p"}'], "login.user", 1),
+        (["--login", '["u", 1]'], "login.1", None),
+        (["--ports", '["x"]'], "ports.0", "x"),
+        (["--sizes", '["x"]'], "sizes.0", "x"),
+        (["--node", '"x"'], "node", "x"),
+    ],
+)
+def test_structured_values_keep_received_outside_secrets(argv: list[str], path: str, received: Any, run: Run) -> None:
+    app = App("auth")
+
+    @app.command
+    def login(
+        db: Db | None = None,
+        vault: Vault | None = None,
+        login: Pair | None = None,
+        ports: Ports | None = None,
+        sizes: Sequence[int] = (),
+        node: Node | None = None,
+    ) -> None: ...
+
+    result = run(app, ["login", *argv])
+
+    assert result.code == 2
+    [field_error] = [item for item in result.json()["field_errors"] if item["path"] == path]
+    assert field_error.get("received") == received

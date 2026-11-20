@@ -35,7 +35,7 @@ def test_error_message_keeps_only_its_first_line(run_raising: RunRaising) -> Non
 
 @pytest.mark.parametrize("code", ["note_exists", "NoteExists", "NOTE-EXISTS", "", "_NOTE"])
 def test_command_error_code_must_be_screaming_case(code: str) -> None:
-    with pytest.raises(ValueError, match="SCREAMING_CASE"):
+    with pytest.raises(ValueError, match="should match pattern"):
         CommandError(code, "message")
 
 
