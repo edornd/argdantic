@@ -1,7 +1,7 @@
 import functools
 from datetime import date
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import pytest
 from conftest import Run
@@ -178,3 +178,55 @@ def test_field_description_wins_over_docstring(run: Run) -> None:
 
     assert "from the field" in result.out
     assert "from the docstring" not in result.out
+
+
+def _field_default_app() -> App:
+    app = App("notes")
+
+    @app.command
+    def show(title: str = Field(min_length=1), count: int = Field(1, ge=0)) -> dict[str, Any]:
+        return {"title": title, "count": count}
+
+    return app
+
+
+def test_field_default_gives_its_default_value(run: Run) -> None:
+    result = run(_field_default_app(), ["show", "--title", "milk"])
+
+    assert result.code == 0
+    assert result.json() == {"title": "milk", "count": 1}
+
+
+@pytest.mark.parametrize(
+    ("argv", "path", "code"),
+    [
+        (["show", "--title", "milk", "--count", "-5"], "count", "greater_than_equal"),
+        (["show", "--title", ""], "title", "string_too_short"),
+        (["show"], "title", "missing"),
+    ],
+)
+def test_field_default_applies_its_constraints(argv: list[str], path: str, code: str, run: Run) -> None:
+    result = run(_field_default_app(), argv)
+
+    assert result.code == 2
+    assert [(item["path"], item["code"]) for item in result.json()["field_errors"]] == [(path, code)]
+
+
+def test_field_default_description_wins_over_docstring(run: Run) -> None:
+    app = App("notes")
+
+    @app.command
+    def add(priority: int = Field(1, description="from the field"), limit: int = Field(10, ge=1)) -> None:
+        """
+        Add a note.
+
+        Args:
+            priority: from the docstring.
+            limit: most notes to keep.
+        """
+
+    result = run(app, ["add", "--help"])
+
+    assert "from the field" in result.out
+    assert "from the docstring" not in result.out
+    assert "most notes to keep." in result.out

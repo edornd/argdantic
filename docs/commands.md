@@ -10,13 +10,24 @@ Each parameter becomes a flag named after it in kebab case: `max_items` becomes 
 - A parameter with a default is optional.
 - A `bool` parameter gets a pair of flags, `--pinned` and `--no-pinned`.
 
+pydantic's `Field` adds constraints and a description. Put it in an `Annotated` type hint or use it as the default, as in a pydantic model:
+
+```python
+@app.command
+def add(
+    title: Annotated[str, Field(min_length=1)],
+    priority: int = Field(1, ge=0, description="higher comes first"),
+) -> None:
+    """Add a note."""
+```
+
 Flags must be spelled in full. argdantic does not expand a prefix such as `--ti` to `--title`.
 
 Input comes only from flags and the defaults in code. argdantic does not read environment variables or `.env` files.
 
 ## Help text
 
-The first line of the docstring is the command's summary, shown in `--help` for the CLI and for the command. Parameter descriptions come from the `Args:` section of a Google-style docstring, or from `Field(description=...)` in an `Annotated` type hint. When both are set, the `Field` wins.
+The first line of the docstring is the command's summary, shown in `--help` for the CLI and for the command. Parameter descriptions come from the `Args:` section of a Google-style docstring, or from `Field(description=...)`. When both are set, the `Field` wins.
 
 ## Results
 
