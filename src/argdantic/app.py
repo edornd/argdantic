@@ -175,14 +175,27 @@ class App:
 
         def register(fn: F) -> F:
             spec = _build_spec(fn, hints)
-            self._children[spec.name] = spec
+            self._register(spec.name, spec)
             return fn
 
         return register if fn is None else register(fn)
 
     def add(self, app: "App") -> None:
         """Mount another App as a group, selected on the command line by its name."""
-        self._children[app.name] = app
+        if not isinstance(app, App):
+            raise TypeError(f"add takes an App, got {app!r}; register a function with @app.command")
+        if app._reaches(self):
+            raise ValueError(f"mounting '{app.name}' on '{self.name}' makes a cycle")
+        self._register(app.name, app)
+
+    def _register(self, name: str, child: "CommandSpec | App") -> None:
+        if name in self._children:
+            raise ValueError(f"'{self.name}' already has a command or group named '{name}'")
+        self._children[name] = child
+
+    def _reaches(self, app: "App") -> bool:
+        """Whether `app` is this App or is mounted anywhere below it."""
+        return app is self or any(isinstance(child, App) and child._reaches(app) for child in self._children.values())
 
     @property
     def _summary(self) -> str:
