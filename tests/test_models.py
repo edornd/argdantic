@@ -139,6 +139,37 @@ def test_default_instance_keeps_its_other_values(run: Run) -> None:
     assert result.json() == {"optim": {"lr": 0.5}, "epochs": 5}
 
 
+def _five_epochs() -> TrainConfig:
+    return TrainConfig(epochs=5)
+
+
+FIVE_EPOCHS_FACTORY = Field(default_factory=_five_epochs)
+
+
+def test_default_factory_keeps_its_other_values(run: Run) -> None:
+    app = App("ml")
+
+    @app.command
+    def train(cfg: TrainConfig = FIVE_EPOCHS_FACTORY) -> TrainConfig:
+        return cfg
+
+    result = run(app, ["train", "--cfg.optim.lr", "0.5"])
+
+    assert result.json() == {"optim": {"lr": 0.5}, "epochs": 5}
+
+
+def test_annotated_default_factory_is_used(run: Run) -> None:
+    app = App("ml")
+
+    @app.command
+    def train(cfg: Annotated[Sized, Field(default_factory=lambda: Sized(size=2))]) -> Sized:
+        return cfg
+
+    result = run(app, ["train"])
+
+    assert result.json() == {"size": 2, "epochs": 3}
+
+
 def test_default_instance_with_computed_and_secret_fields_merges(run: Run) -> None:
     app = App("ml")
 

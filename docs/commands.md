@@ -88,6 +88,7 @@ The top-level fields of a `Flat` model share their flag names with the other par
 - A model parameter with no default is optional when every field of the model has a default. argdantic builds the model when the command runs.
 - When a required field of the model gets no flag, the error names that field: `cfg.size`, or `size` for a `Flat` parameter.
 - With a default instance, the flags change only the fields they name. `cfg: TrainConfig = TrainConfig(epochs=5)` with `--cfg.optim.lr 0.5` gives `lr=0.5` and keeps `epochs=5`. `--help` shows the values of the instance.
+- A `Field(default_factory=...)` default works the same way. The flags change the fields they name in the factory's result.
 
 ### Environment variables
 

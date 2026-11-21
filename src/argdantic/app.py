@@ -67,8 +67,20 @@ class ModelParam:
     """A parameter annotated with a pydantic model."""
 
     required: bool
-    # the default instance, which the flags given for this parameter update
-    default: BaseModel | None
+    # the field as the author declared it, when its default (an instance or a factory's result) is what the flags
+    # given for this parameter update
+    declared: FieldInfo | None
+
+    @property
+    def instance(self) -> BaseModel | None:
+        """The default instance, without calling a factory."""
+        default = self.declared.default if self.declared else None
+        return default if isinstance(default, BaseModel) else None
+
+    def base(self) -> BaseModel | None:
+        """The default the flags update: the instance, or a new one from the factory."""
+        default = self.declared.get_default(call_default_factory=True) if self.declared else None
+        return default if isinstance(default, BaseModel) else None
 
 
 @dataclass(frozen=True)
@@ -169,12 +181,18 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         # a `Field(...)` default holds the field's settings, as it does in a pydantic model
         field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
         if model_class is not None:
+            # the default may also sit in a Field in the annotation
+            declared = FieldInfo.from_annotated_attribute(annotation, field)
             buildable = not any(info.is_required() for info in model_class.model_fields.values())
-            if default is ... and buildable:
+            if declared.is_required() and buildable:
                 # built at run time, so a BaseSettings model reads env only when the command runs
                 field = FieldInfo.from_field(default_factory=model_class)
-            instance = field.default if isinstance(field.default, BaseModel) else None
-            model_params[param_name] = ModelParam(required=field.is_required(), default=instance)
+            # a factory that takes the validated data has nothing to give before validation
+            own = not declared.is_required() and not declared.default_factory_takes_validated_data
+            model_params[param_name] = ModelParam(
+                required=declared.is_required() and not buildable,
+                declared=declared if own else None,
+            )
         # Field(description=...) in the annotation or the default wins over the docstring
         described = FieldInfo.from_annotation(annotation).description or field.description
         if not described and param_name in param_descriptions:
@@ -184,7 +202,7 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
             flag_fields[param_name] = fields[param_name]
             owners.append((_kebab_case(_raw_key(field, param_name)), f"`{param_name}`"))
             continue
-        instance = model_params[param_name].default
+        instance = model_params[param_name].instance
         for name, info in model_class.model_fields.items():
             default_value = ... if instance is None else getattr(instance, name)
             # a plain parameter may share the field's name and still have another flag, through an alias
@@ -389,9 +407,10 @@ class App:
                 raw[_raw_key(fields[name], name)] = group
         for name, param in leaf.spec.model_params.items():
             key = _raw_key(fields[name], name)
-            if key in raw and param.default is not None:
-                raw[key] = _deep_merge(param.default.model_dump(by_alias=True, round_trip=True), raw[key])
-            elif key not in raw and param.required:
+            if key in raw:
+                if (base := param.base()) is not None:
+                    raw[key] = _deep_merge(base.model_dump(by_alias=True, round_trip=True), raw[key])
+            elif param.required:
                 # each missing field is then reported on its own path, not the parameter as a whole
                 raw[key] = {}
         return raw
