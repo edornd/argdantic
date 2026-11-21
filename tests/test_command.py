@@ -148,20 +148,6 @@ def test_help_shows_docstring_and_field_descriptions(run: Run) -> None:
     assert "keep the note at the top of the list." in " ".join(result.out.split())
 
 
-def test_root_help_lists_commands_with_their_summary(run: Run) -> None:
-    app = App("notes")
-
-    @app.command
-    def add() -> None:
-        """Add a note."""
-
-    result = run(app, ["--help"])
-
-    assert result.code == 0
-    assert "add" in result.out
-    assert "Add a note." in result.out
-
-
 def test_field_description_wins_over_docstring(run: Run) -> None:
     app = App("notes")
 

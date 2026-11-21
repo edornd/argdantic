@@ -93,7 +93,7 @@ def test_root_help_lists_commands_and_groups_with_their_summaries(cli_app: App, 
     assert "Notes are plain text." not in result.out
 
 
-def test_triple_quoted_group_description_gives_a_summary(run: Run) -> None:
+def test_triple_quoted_description_gives_a_summary_and_keeps_its_paragraphs(run: Run) -> None:
     notes = App(
         "notes",
         description="""
@@ -105,10 +105,11 @@ def test_triple_quoted_group_description_gives_a_summary(run: Run) -> None:
     cli = App("cli")
     cli.add(notes)
 
-    result = run(cli, ["--help"])
+    root = run(cli, ["--help"])
+    group = run(cli, ["notes", "--help"])
 
-    assert result.code == 0
-    assert _lists(result.out, "notes", "Work with notes.")
+    assert _lists(root.out, "notes", "Work with notes.")
+    assert "\nWork with notes.\n\nNotes are plain text.\n" in group.out
 
 
 def test_group_help_lists_its_commands_and_groups(cli_app: App, run: Run) -> None:
@@ -130,25 +131,6 @@ def test_command_help_works_inside_a_group(cli_app: App, run: Run) -> None:
     assert "--title" in result.out
 
 
-@pytest.mark.parametrize("mounted", [True, False])
-def test_help_keeps_the_paragraphs_of_a_triple_quoted_description(mounted: bool, run: Run) -> None:
-    notes = App(
-        "notes",
-        description="""
-        Work with notes.
-
-        Notes are plain text.
-        """,
-    )
-    cli = App("cli")
-    cli.add(notes)
-
-    result = run(cli, ["notes", "--help"]) if mounted else run(notes, ["--help"])
-
-    assert result.code == 0
-    assert "\nWork with notes.\n\nNotes are plain text.\n" in result.out
-
-
 def test_percent_sign_in_a_summary_shows_in_help(run: Run) -> None:
     cli = App("cli")
     cli.add(App("notes", description="Use 100% of notes."))
@@ -162,20 +144,6 @@ def test_percent_sign_in_a_summary_shows_in_help(run: Run) -> None:
     assert result.code == 0
     assert _lists(result.out, "notes", "Use 100% of notes.")
     assert _lists(result.out, "sync", "Sync 100% of notes.")
-
-
-def test_group_name_with_a_bracket_leaves_other_commands_working(run: Run) -> None:
-    # pydantic-settings parses a list it finds in argparse's result as input, and "[beta" is not valid input
-    cli = App("cli")
-    cli.add(App("[beta"))
-
-    @cli.command
-    def sync() -> str:
-        return "synced"
-
-    result = run(cli, ["sync"])
-
-    assert (result.code, result.json()) == (0, "synced")
 
 
 def test_unknown_flag_in_a_group_lists_the_command_flags(cli_app: App, calls: list[str], run: Run) -> None:

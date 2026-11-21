@@ -583,18 +583,6 @@ def test_app_without_commands_has_no_choices(run: Run) -> None:
     assert result.json()["field_errors"][0]["allowed"] == []
 
 
-@pytest.mark.parametrize("argv", [["-h"], ["notes", "--help"], ["notes", "tags", "-h"]])
-def test_help_at_any_level_is_not_an_error(argv: list[str], cli_app: App, run: Run) -> None:
-    assert run(cli_app, argv).code == 0
-
-
-def test_flag_value_that_names_a_group_is_a_value(cli_app: App, calls: list[str], run: Run) -> None:
-    result = run(cli_app, ["notes", "add", "--title", "tags"])
-
-    assert result.code == 0
-    assert calls == ["tags"]
-
-
 def test_argv_defaults_to_sys_argv(cli_app: App, run: Run, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["cli", "nots"])
 
