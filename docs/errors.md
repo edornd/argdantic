@@ -16,7 +16,7 @@ A run prints exactly one JSON document on stdout: the result when it succeeds, a
 | `message` | string | One line for the reader. The wording may change; do not match on it. |
 | `retryable` | bool | Whether the same call may succeed if tried again. |
 | `hint` | string, optional | What the caller can do about it. |
-| `field_errors` | list, optional | One entry per problem with an input value. |
+| `field_errors` | list, optional | One entry per problem with an input value or a command name. |
 
 Each field error has these keys:
 
@@ -27,7 +27,7 @@ Each field error has these keys:
 | `message` | string | One line for the reader. |
 | `expected` | string, optional | What the input should look like. |
 | `received` | any, optional | The value given. Omitted when the value is or holds a secret, see [Secrets](#secrets). |
-| `allowed` | list, optional | The accepted values: the choices of a `Literal` or an enum, or the valid flags for an unknown flag. |
+| `allowed` | list, optional | The accepted values: the choices of a `Literal` or an enum, the valid flags for an unknown flag, or the commands and groups for a command name. |
 | `source` | string, optional | Where the value came from. Currently always `flag`. |
 
 ## Rejected input

@@ -60,7 +60,7 @@ $ python cli.py notes add --title milk
 - Groups nest to any depth. Mount one group on another with `add`.
 - A mounted `App` still runs alone, so `notes(["add", "--title", "milk"])` works, and a group can live in its own module.
 - `add` mounts the `App` itself, not a copy. A command registered on `notes` after `cli.add(notes)` is still available through `cli`.
-- The first line of `description` is the group's summary in the parent's `--help`. `notes --help` shows the full description.
+- `description` is the help text of an `App`. `python cli.py --help` shows the description of `cli`, then each command and group with its summary. The summary of a group is the first line of its description. `python cli.py notes --help` shows the full description of `notes`.
 - The names at one level are unique. Two commands with the same name, a command and a group with the same name, or an `App` mounted below itself raise an error when the module is imported.
 
 ## Results
