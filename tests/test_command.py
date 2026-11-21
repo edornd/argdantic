@@ -63,6 +63,21 @@ def test_none_result_prints_nothing(run: Run) -> None:
     assert calls == ["sync"]
 
 
+def test_missing_return_annotation_prints_result_as_any(run: Run) -> None:
+    app = App("notes")
+
+    @app.command
+    def sync():
+        pass
+
+    @app.command
+    def count():
+        return {"notes": 3}
+
+    assert run(app, ["sync"]) == (0, "", "")
+    assert run(app, ["count"]).json() == {"notes": 3}
+
+
 def test_result_is_dumped_through_the_return_annotation(run: Run) -> None:
     app = App("notes")
 

@@ -65,7 +65,7 @@ $ python cli.py notes add --title milk
 
 ## Results
 
-The return type hint decides how the result is serialised. A pydantic model, a dataclass, a dict or a plain value prints as one JSON document on stdout. A command that returns `None` prints nothing. Exit code 0 means success.
+The return type hint decides how the result is serialised. With no return type hint, argdantic treats the result as `Any`. A pydantic model, a dataclass, a dict or a plain value prints as one JSON document on stdout. A command that returns `None` prints nothing. Exit code 0 means success.
 
 ## Safety hints
 

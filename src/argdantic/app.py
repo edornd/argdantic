@@ -98,11 +98,12 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         __doc__=summary,
         **fields,
     )
+    returns = Any if signature.return_annotation is signature.empty else signature.return_annotation
     return CommandSpec(
         name=_kebab_case(fn_name),
         fn=fn,
         model=model,
-        output=TypeAdapter(signature.return_annotation),
+        output=TypeAdapter(returns),
         hints=hints,
         summary=summary,
     )
