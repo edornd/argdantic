@@ -6,7 +6,7 @@ import re
 import sys
 import traceback
 import typing
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from types import NoneType
 from typing import Any, ForwardRef, NoReturn, Self, get_args, get_origin
 
@@ -98,10 +98,31 @@ class CommandError(Exception):
 class InputRejected(Exception):
     """Raised inside a run when the input is rejected, before the command is called."""
 
-    def __init__(self, message: str, field_errors: list[FieldError] | None = None) -> None:
+    def __init__(
+        self, message: str, field_errors: list[FieldError] | None = None, *, code: str = "VALIDATION_ERROR"
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.field_errors = field_errors or None
+        self.code = code
+
+    @classmethod
+    def command_not_found(cls, path: Sequence[str], allowed: list[str], token: str | None = None) -> Self:
+        """An unknown command `token`, or a missing one when it is None, at the level `path` names."""
+        level = " ".join(path)
+        if token is None:
+            message, field_message = f"a command is required in '{level}'", "a command is required"
+        else:
+            message, field_message = f"unknown command '{token}' in '{level}'", f"unknown command {token}"
+        field_error = FieldError(
+            path="command",
+            code="missing" if token is None else "unknown_command",
+            message=field_message,
+            received=token,
+            allowed=allowed,
+            source="flag",
+        )
+        return cls(message, [field_error], code="COMMAND_NOT_FOUND")
 
     @classmethod
     def from_parse(
@@ -123,7 +144,7 @@ class InputRejected(Exception):
     @property
     def report(self) -> ErrorReport:
         return ErrorReport(
-            code="VALIDATION_ERROR",
+            code=self.code,
             message=self.message,
             field_errors=self.field_errors,
             exit_code=ExitCode.REJECTED,

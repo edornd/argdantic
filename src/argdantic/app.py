@@ -1,6 +1,7 @@
 import argparse
 import inspect
 import json
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Annotated, Any, NoReturn, TypeVar, overload
@@ -232,6 +233,8 @@ class App:
 
     def _run(self, argv: Sequence[str] | None) -> str | None:
         """The rendered result, or None when there is nothing to print."""
+        argv = sys.argv[1:] if argv is None else list(argv)
+        self._check_command_path(argv)
         parsed_args, leftovers = self._parser().parse_known_args(argv)
         leaf: _Leaf = parsed_args._leaf
         spec = leaf.spec
@@ -245,3 +248,20 @@ class App:
         if result is None:
             return None
         return json.dumps(spec.output.dump_python(result, mode="json"))
+
+    def _check_command_path(self, argv: Sequence[str]) -> None:
+        """Walk argv down the tree to a command, so a wrong or missing name gets its choices, not argparse's text."""
+        app, path = self, [self.name]
+        for token in argv:
+            if token in ("-h", "--help"):
+                return
+            if token.startswith("-"):
+                # a flag where a command name should be: the name is missing, not unknown
+                break
+            child = app._children.get(token)
+            if child is None:
+                raise InputRejected.command_not_found(path, list(app._children), token)
+            if isinstance(child, CommandSpec):
+                return
+            app, path = child, [*path, token]
+        raise InputRejected.command_not_found(path, list(app._children))

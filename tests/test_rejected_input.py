@@ -454,3 +454,94 @@ def test_structured_values_keep_received_outside_secrets(argv: list[str], path: 
     assert result.code == 2
     [field_error] = [item for item in result.json()["field_errors"] if item["path"] == path]
     assert field_error.get("received") == received
+
+
+@pytest.mark.parametrize(
+    ("argv", "level", "token", "allowed"),
+    [
+        (["nots"], "cli", "nots", ["notes", "sync"]),
+        (["notes", "tgas", "rename"], "cli notes", "tgas", ["add", "tags"]),
+        (["notes", "tags", "remove", "--old", "a"], "cli notes tags", "remove", ["rename"]),
+    ],
+)
+def test_unknown_command_lists_the_choices_at_its_level(
+    argv: list[str], level: str, token: str, allowed: list[str], cli_app: App, calls: list[str], run: Run
+) -> None:
+    result = run(cli_app, argv)
+
+    assert result.code == 2
+    assert calls == []
+    assert result.json() == {
+        "code": "COMMAND_NOT_FOUND",
+        "message": f"unknown command '{token}' in '{level}'",
+        "retryable": False,
+        "field_errors": [
+            {
+                "path": "command",
+                "code": "unknown_command",
+                "message": f"unknown command {token}",
+                "received": token,
+                "allowed": allowed,
+                "source": "flag",
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("argv", "level", "allowed"),
+    [
+        ([], "cli", ["notes", "sync"]),
+        (["notes"], "cli notes", ["add", "tags"]),
+        (["notes", "--title", "x"], "cli notes", ["add", "tags"]),
+    ],
+)
+def test_missing_command_lists_the_choices_at_its_level(
+    argv: list[str], level: str, allowed: list[str], cli_app: App, calls: list[str], run: Run
+) -> None:
+    result = run(cli_app, argv)
+
+    assert result.code == 2
+    assert calls == []
+    assert result.json() == {
+        "code": "COMMAND_NOT_FOUND",
+        "message": f"a command is required in '{level}'",
+        "retryable": False,
+        "field_errors": [
+            {
+                "path": "command",
+                "code": "missing",
+                "message": "a command is required",
+                "allowed": allowed,
+                "source": "flag",
+            }
+        ],
+    }
+
+
+def test_app_without_commands_has_no_choices(run: Run) -> None:
+    result = run(App("empty"), [])
+
+    assert result.code == 2
+    assert result.json()["field_errors"][0]["allowed"] == []
+
+
+@pytest.mark.parametrize("argv", [["-h"], ["notes", "--help"], ["notes", "tags", "-h"]])
+def test_help_at_any_level_is_not_an_error(argv: list[str], cli_app: App, run: Run) -> None:
+    assert run(cli_app, argv).code == 0
+
+
+def test_flag_value_that_names_a_group_is_a_value(cli_app: App, calls: list[str], run: Run) -> None:
+    result = run(cli_app, ["notes", "add", "--title", "tags"])
+
+    assert result.code == 0
+    assert calls == ["tags"]
+
+
+def test_argv_defaults_to_sys_argv(cli_app: App, run: Run, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["cli", "nots"])
+
+    result = run(cli_app, None)
+
+    assert result.code == 2
+    assert result.json()["field_errors"][0]["received"] == "nots"
