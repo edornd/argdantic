@@ -135,14 +135,19 @@ class InputRejected(Exception):
         leftovers: list[str],
         valid_flags: list[str],
         error: ValidationError | SettingsError | None = None,
+        flat: frozenset[str] = frozenset(),
     ) -> Self:
-        """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors."""
+        """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors.
+
+        Args:
+            flat: the Flat parameters, whose name the error paths leave out.
+        """
         field_errors = _leftover_errors(leftovers, valid_flags)
         if isinstance(error, SettingsError):
             # malformed JSON in a structured flag, pydantic-settings names the field only in its message
             return cls(str(error), field_errors)
         if error is not None:
-            field_errors += [_field_error(model, item) for item in error.errors()]
+            field_errors += [_field_error(model, item, flat) for item in error.errors()]
         return cls("invalid input", field_errors)
 
     @property
@@ -155,17 +160,19 @@ class InputRejected(Exception):
         )
 
 
-def _field_error(model: type[BaseModel], error: ErrorDetails) -> FieldError:
+def _field_error(model: type[BaseModel], error: ErrorDetails, flat: frozenset[str]) -> FieldError:
     loc = error["loc"]
+    # a Flat parameter has no flag of its own, so the path starts at its model's field
+    path = _dotted(loc[1:] if loc and loc[0] in flat else loc)
     if error["type"] == "missing":
         # `input` holds the whole parent input here, not a value for this field
-        return FieldError(path=_dotted(loc), code="missing", message=error["msg"])
+        return FieldError(path=path, code="missing", message=error["msg"])
     annotations = _annotations_at(model, loc)
     # an unresolved path counts as secret, so a type the walk does not understand can't leak its value
     hidden = any(annotation is None or _holds_secret(annotation) for annotation in annotations)
     allowed = [choice for annotation in annotations if annotation is not None for choice in _choices(annotation)]
     return FieldError(
-        path=_dotted(loc),
+        path=path,
         code=error["type"],
         message=error["msg"],
         expected=error.get("ctx", {}).get("expected"),

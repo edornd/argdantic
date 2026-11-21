@@ -19,6 +19,15 @@ from argdantic.docstrings import parse_docstring
 from argdantic.errors import ExitCode, InputRejected, fail
 
 F = TypeVar("F", bound=Callable[..., Any])
+T = TypeVar("T")
+
+
+class _FlatMarker:
+    """Marks a model parameter whose fields become top-level flags."""
+
+
+# `Flat[Model]` reads as `Model` to a type checker, and drops the parameter name from the model's flags
+Flat = Annotated[T, _FlatMarker()]
 
 
 class InputModel(BaseSettings):
@@ -73,6 +82,10 @@ class CommandSpec:
     hints: SafetyHints
     summary: str
     model_params: dict[str, ModelParam]
+    # builds the parser: `model` with each Flat model's fields in place of its parameter
+    flag_model: type[InputModel]
+    # each Flat parameter, with the raw keys of its model's fields
+    flat: dict[str, frozenset[str]]
 
 
 def _kebab_case(name: str) -> str:
@@ -99,6 +112,40 @@ def _deep_merge(base: Mapping[str, Any], update: Mapping[str, Any]) -> dict[str,
     return merged
 
 
+def _raw_key(info: FieldInfo, name: str) -> str:
+    """The key pydantic-settings gives a field's value in the raw dict, and the base of its flag."""
+    alias = info.validation_alias
+    return alias if isinstance(alias, str) else info.alias or name
+
+
+def _is_flat(annotation: Any) -> bool:
+    return get_origin(annotation) is Annotated and any(isinstance(m, _FlatMarker) for m in annotation.__metadata__)
+
+
+def _inlined(info: FieldInfo, name: str, default: Any) -> FieldInfo:
+    """A copy of a Flat model's field for the flag model, with the default the run uses (`...` keeps its own)."""
+    own = default is ...
+    # the flag model keys this field by another name. pydantic-settings takes the flag from the alias and the raw
+    # key from the validation alias, so both hold the raw key the field has in its own model
+    key = _raw_key(info, name)
+    return FieldInfo.from_field(
+        info.default if own else default,
+        default_factory=info.default_factory if own else None,
+        alias=key,
+        validation_alias=key,
+        description=info.description,
+    )
+
+
+def _check_flag_names(owners: list[tuple[str, str]]) -> None:
+    """Raise when two parameters or Flat fields give the same top-level flag."""
+    seen: dict[str, str] = {}
+    for flag, owner in owners:
+        if flag in seen:
+            raise ValueError(f"flag `--{flag}` comes from {seen[flag]} and {owner}")
+        seen[flag] = owner
+
+
 def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     # the command name comes from __name__, which partials and callable instances lack
     fn_name = getattr(fn, "__name__", None)
@@ -107,11 +154,18 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     signature = inspect.signature(fn, eval_str=True)
     summary, param_descriptions = parse_docstring(inspect.getdoc(fn) or "")
     fields: dict[str, Any] = {}
+    flag_fields: dict[str, Any] = {}
+    owners: list[tuple[str, str]] = []
     model_params: dict[str, ModelParam] = {}
+    flat: dict[str, frozenset[str]] = {}
     for param_name, param in signature.parameters.items():
         default = ... if param.default is param.empty else param.default
         annotation = param.annotation
         model_class = _model_class(annotation)
+        if _is_flat(annotation) and model_class is None:
+            raise TypeError(
+                f"Flat needs a pydantic model, got {get_args(annotation)[0]!r} for parameter '{param_name}'"
+            )
         # a `Field(...)` default holds the field's settings, as it does in a pydantic model
         field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
         if model_class is not None:
@@ -126,12 +180,32 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         if not described and param_name in param_descriptions:
             annotation = Annotated[annotation, Field(description=param_descriptions[param_name])]
         fields[param_name] = (annotation, field)
+        if model_class is None or not _is_flat(param.annotation):
+            flag_fields[param_name] = fields[param_name]
+            owners.append((_kebab_case(_raw_key(field, param_name)), f"`{param_name}`"))
+            continue
+        instance = model_params[param_name].default
+        for name, info in model_class.model_fields.items():
+            default_value = ... if instance is None else getattr(instance, name)
+            # a plain parameter may share the field's name and still have another flag, through an alias
+            flag_fields[f"{param_name}__{name}"] = (info.annotation, _inlined(info, name, default_value))
+            owners.append((_kebab_case(_raw_key(info, name)), f"`{param_name}: Flat[{model_class.__name__}]`"))
+        flat[param_name] = frozenset(_raw_key(info, name) for name, info in model_class.model_fields.items())
+    _check_flag_names(owners)
     model = create_model(
         _pascal_case(fn_name),
         __base__=InputModel,
         __doc__=summary,
         **fields,
     )
+    flag_model = model
+    if flat:
+        flag_model = create_model(
+            _pascal_case(fn_name),
+            __base__=InputModel,
+            __doc__=summary,
+            **flag_fields,
+        )
     returns = Any if signature.return_annotation is signature.empty else signature.return_annotation
     return CommandSpec(
         name=_kebab_case(fn_name),
@@ -141,6 +215,8 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         hints=hints,
         summary=summary,
         model_params=model_params,
+        flag_model=flag_model,
+        flat=flat,
     )
 
 
@@ -289,7 +365,7 @@ class App:
                 description=child.summary,
                 allow_abbrev=False,
             )
-            source = CliSettingsSource(child.model, root_parser=subparser)
+            source = CliSettingsSource(child.flag_model, root_parser=subparser)
             subparser.set_defaults(_leaf=_Leaf(child, source, _flags(subparser)))
 
     def __call__(self, argv: Sequence[str] | None = None) -> NoReturn:
@@ -307,9 +383,12 @@ class App:
         """The raw values from the flags, with the model parameter defaults applied."""
         raw = leaf.source(parsed_args=parsed_args)()
         fields = leaf.spec.model.model_fields
+        for name, keys in leaf.spec.flat.items():
+            group = {key: raw.pop(key) for key in keys if key in raw}
+            if group:
+                raw[_raw_key(fields[name], name)] = group
         for name, param in leaf.spec.model_params.items():
-            # pydantic-settings keys the raw values by alias
-            key = fields[name].alias or name
+            key = _raw_key(fields[name], name)
             if key in raw and param.default is not None:
                 raw[key] = _deep_merge(param.default.model_dump(by_alias=True, round_trip=True), raw[key])
             elif key not in raw and param.required:
@@ -324,12 +403,13 @@ class App:
             raise InputRejected.command_not_found(parsed_args._level, list(parsed_args._choices))
         leaf: _Leaf = parsed_args._leaf
         spec = leaf.spec
+        flat = frozenset(spec.flat)
         try:
             command_inputs = spec.model(**self._inputs(leaf, parsed_args))
         except (ValidationError, SettingsError) as error:
-            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error) from None
+            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error, flat) from None
         if leftovers:
-            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags)
+            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, flat=flat)
         result = spec.fn(**dict(command_inputs))
         if result is None:
             return None
