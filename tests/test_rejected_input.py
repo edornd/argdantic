@@ -195,7 +195,12 @@ def test_choice_errors_list_the_allowed_values(argv: list[str], expected: dict[s
     ],
 )
 def test_unknown_flag_lists_the_valid_flags(
-    argv: list[str], path: str, received: str, notes_app: App, calls: list[str], run: Run
+    argv: list[str],
+    path: str,
+    received: str,
+    notes_app: App,
+    calls: list[str],
+    run: Run,
 ) -> None:
     result = run(notes_app, ["add", *argv])
 
@@ -235,7 +240,10 @@ def test_stray_token_is_an_unexpected_argument(notes_app: App, calls: list[str],
     [(["--", "extra"], ["--", "extra"]), (["-.5"], ["-.5"]), (["-1e3"], ["-1e3"]), (["-"], ["-"])],
 )
 def test_separator_and_negative_numbers_are_not_flags(
-    argv: list[str], tokens: list[str], notes_app: App, run: Run
+    argv: list[str],
+    tokens: list[str],
+    notes_app: App,
+    run: Run,
 ) -> None:
     result = run(notes_app, ["add", *argv])
 
@@ -340,7 +348,10 @@ def test_secret_fields_never_echo_the_received_value(argv: list[str], path: str,
     ],
 )
 def test_received_is_hidden_for_secrets_and_unresolved_paths(
-    argv: list[str], path: str, received: str | None, run: Run
+    argv: list[str],
+    path: str,
+    received: str | None,
+    run: Run,
 ) -> None:
     app = App("auth")
 

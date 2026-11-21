@@ -46,7 +46,8 @@ def test_command_error_cannot_use_a_reserved_exit_code(exit_code: int) -> None:
 
 
 def test_uncaught_exception_is_unknown_without_a_traceback(
-    monkeypatch: pytest.MonkeyPatch, run_raising: RunRaising
+    monkeypatch: pytest.MonkeyPatch,
+    run_raising: RunRaising,
 ) -> None:
     monkeypatch.delenv("ARGD_DEBUG", raising=False)
 
@@ -85,7 +86,10 @@ def test_result_that_cannot_be_serialised_is_unknown(run: Run) -> None:
     [("1", True), ("true", True), ("on", True), ("0", False), ("off", False), ("", False), ("verbose", False)],
 )
 def test_argd_debug_sends_the_traceback_to_stderr(
-    value: str, shows_traceback: bool, monkeypatch: pytest.MonkeyPatch, run_raising: RunRaising
+    value: str,
+    shows_traceback: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    run_raising: RunRaising,
 ) -> None:
     monkeypatch.setenv("ARGD_DEBUG", value)
 
