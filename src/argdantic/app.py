@@ -229,7 +229,7 @@ class App:
         # each group on the path overwrites these, so a missing command is reported at the deepest one. A tuple,
         # because pydantic-settings parses every list in argparse's result as input
         parser.set_defaults(_level=parser.prog, _choices=tuple(self._children))
-        # not required=True: argparse would then report a missing command as text, before _run can
+        # not required=True: argparse would then reject a missing command with its own text, not COMMAND_NOT_FOUND
         subparsers = parser.add_subparsers(dest="_command_name")
         for name, child in self._children.items():
             # argparse 3.14.0 builds a default prog with colour codes, and error messages print the prog
