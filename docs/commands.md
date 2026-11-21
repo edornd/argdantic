@@ -23,7 +23,103 @@ def add(
 
 Flags must be spelled in full. argdantic does not expand a prefix such as `--ti` to `--title`.
 
-Input comes only from flags and the defaults in code. argdantic does not read environment variables or `.env` files.
+Input comes from flags and the defaults in code. A `BaseSettings` parameter also reads environment variables, see [Environment variables](#environment-variables).
+
+## Config models
+
+A parameter typed with a pydantic model gives one flag per nested field. The flag is the dotted path from the parameter name.
+
+```python
+from pydantic import BaseModel, Field
+
+from argdantic import App, Flat
+
+app = App("trainctl")
+
+
+class Optim(BaseModel):
+    lr: float = Field(0.1, gt=0, description="learning rate")
+
+
+class TrainConfig(BaseModel):
+    optim: Optim = Optim()
+    epochs: int = 3
+
+
+@app.command
+def train(cfg: TrainConfig) -> TrainConfig:
+    """Launch a training run."""
+    return cfg
+
+
+if __name__ == "__main__":
+    app()
+```
+
+```console
+$ python trainctl.py train --cfg.optim.lr 0.5 --cfg.epochs 4
+{"optim": {"lr": 0.5}, "epochs": 4}
+```
+
+The command gets a `TrainConfig` with an `Optim` inside. An error on a nested field names its dotted path, for example `cfg.optim.lr`. `--help` lists the fields of each model in their own group, with their descriptions.
+
+### Flat models
+
+`Flat[Model]` leaves the parameter name out of the flags:
+
+```python
+@app.command
+def train(cfg: Flat[TrainConfig], slurm: bool = False) -> TrainConfig:
+    """Launch a training run."""
+    return cfg
+```
+
+```console
+$ python trainctl.py train --optim.lr 0.5 --epochs 4 --slurm
+{"optim": {"lr": 0.5}, "epochs": 4}
+```
+
+A type checker reads `Flat[TrainConfig]` as `TrainConfig`. The model validates as it does anywhere else. Its validators see the raw flag values, and its config applies only to it. Error paths leave out the parameter name, so `--optim.lr -1` reports `optim.lr`.
+
+The top-level fields of a `Flat` model share their flag names with the other parameters. When two of them give the same flag, `@app.command` raises an error at import. `Flat` takes a pydantic model class only.
+
+### Defaults
+
+- A model parameter with no default is optional when every field of the model has a default. argdantic builds the model when the command runs.
+- When a required field of the model gets no flag, the error names that field: `cfg.size`, or `size` for a `Flat` parameter.
+- With a default instance, the flags change only the fields they name. `cfg: TrainConfig = TrainConfig(epochs=5)` with `--cfg.optim.lr 0.5` gives `lr=0.5` and keeps `epochs=5`. `--help` shows the values of the instance.
+
+### Environment variables
+
+A parameter typed with a `BaseSettings` model from pydantic-settings reads environment variables as its own config says, for example with `env_prefix`, `env_file` or `secrets_dir`. A flag wins over an environment variable, and an environment variable wins over the default.
+
+```python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Cluster(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="TRAIN_")
+
+    nodes: int = 1
+
+
+@app.command
+def launch(cluster: Cluster) -> Cluster:
+    """Launch on the cluster."""
+    return cluster
+```
+
+```console
+$ TRAIN_NODES=4 python trainctl.py launch
+{"nodes": 4}
+$ TRAIN_NODES=4 python trainctl.py launch --cluster.nodes 8
+{"nodes": 8}
+```
+
+- A default instance such as `cluster: Cluster = Cluster()` reads the environment once, when Python imports the module. Leave out the default to read it each time the command runs.
+- `--help` shows the default in code, not the value from the environment.
+
+Plain parameters and parameters typed with a plain `BaseModel` do not read environment variables.
 
 ## Help text
 
