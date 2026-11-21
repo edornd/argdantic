@@ -66,3 +66,32 @@ def run_raising(run: Run) -> RunRaising:
         return run(app, ["add"])
 
     return run_with
+
+
+@pytest.fixture
+def cli_app(calls: list[str]) -> App:
+    """`cli` with a group `notes` (command `add`, nested group `tags`) and a root command `sync`."""
+    tags = App("tags", description="Manage tags.")
+
+    @tags.command
+    def rename(old: str, new: str) -> str:
+        """Rename a tag."""
+        return new
+
+    notes = App("notes", description="Work with notes.\n\nNotes are plain text.")
+
+    @notes.command
+    def add(title: str) -> str:
+        """Add a note."""
+        calls.append(title)
+        return title
+
+    notes.add(tags)
+    cli = App("cli", description="Manage notes.")
+    cli.add(notes)
+
+    @cli.command
+    def sync() -> None:
+        """Sync everything."""
+
+    return cli

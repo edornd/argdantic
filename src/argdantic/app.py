@@ -138,9 +138,10 @@ class _Leaf:
 class App:
     """A CLI: a named tree of commands that runs from an argv list."""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, description: str | None = None) -> None:
         self.name = name
-        self._commands: dict[str, CommandSpec] = {}
+        self.description = description
+        self._children: dict[str, CommandSpec | App] = {}
 
     @overload
     def command(self, fn: F) -> F: ...
@@ -174,25 +175,37 @@ class App:
 
         def register(fn: F) -> F:
             spec = _build_spec(fn, hints)
-            self._commands[spec.name] = spec
+            self._children[spec.name] = spec
             return fn
 
         return register if fn is None else register(fn)
 
+    def add(self, app: "App") -> None:
+        """Mount another App as a group, selected on the command line by its name."""
+        self._children[app.name] = app
+
+    @property
+    def _summary(self) -> str:
+        return parse_docstring(self.description or "")[0]
+
     def _parser(self) -> argparse.ArgumentParser:
         # allow_abbrev=False stops argparse expanding a prefix like --ti to --title
-        parser = _Parser(prog=self.name, allow_abbrev=False)
-        subparsers = parser.add_subparsers(dest="_command_name", required=True)
-        for spec in self._commands.values():
-            subparser = subparsers.add_parser(
-                spec.name,
-                help=spec.summary,
-                description=spec.summary,
-                allow_abbrev=False,
-            )
-            source = CliSettingsSource(spec.model, root_parser=subparser)
-            subparser.set_defaults(_leaf=_Leaf(spec, source, _flags(subparser)))
+        parser = _Parser(prog=self.name, description=self.description, allow_abbrev=False)
+        self._add_children(parser)
         return parser
+
+    def _add_children(self, parser: argparse.ArgumentParser) -> None:
+        subparsers = parser.add_subparsers(dest="_command_name", required=True)
+        for name, child in self._children.items():
+            if isinstance(child, App):
+                subparser = subparsers.add_parser(
+                    name, help=child._summary, description=child.description, allow_abbrev=False
+                )
+                child._add_children(subparser)
+                continue
+            subparser = subparsers.add_parser(name, help=child.summary, description=child.summary, allow_abbrev=False)
+            source = CliSettingsSource(child.model, root_parser=subparser)
+            subparser.set_defaults(_leaf=_Leaf(child, source, _flags(subparser)))
 
     def __call__(self, argv: Sequence[str] | None = None) -> NoReturn:
         """Run the command named in argv (default `sys.argv[1:]`), print its result or error and exit."""

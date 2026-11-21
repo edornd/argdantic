@@ -29,6 +29,39 @@ Input comes only from flags and the defaults in code. argdantic does not read en
 
 The first line of the docstring is the command's summary, shown in `--help` for the CLI and for the command. Parameter descriptions come from the `Args:` section of a Google-style docstring, or from `Field(description=...)`. When both are set, the `Field` wins.
 
+## Groups
+
+A group is an `App` mounted on another `App` with `add`. The group's name is the word that selects it on the command line.
+
+```python
+from argdantic import App
+
+notes = App("notes", description="Work with notes.")
+
+
+@notes.command
+def add(title: str) -> str:
+    """Add a note."""
+    return title
+
+
+cli = App("cli", description="Manage notes.")
+cli.add(notes)
+
+if __name__ == "__main__":
+    cli()
+```
+
+```console
+$ python cli.py notes add --title milk
+"milk"
+```
+
+- Groups nest to any depth. Mount one group on another with `add`.
+- A mounted `App` still runs alone, so `notes(["add", "--title", "milk"])` works, and a group can live in its own module.
+- `add` mounts the `App` itself, not a copy. A command registered on `notes` after `cli.add(notes)` is still available through `cli`.
+- The first line of `description` is the group's summary in the parent's `--help`. `notes --help` shows the full description.
+
 ## Results
 
 The return type hint decides how the result is serialised. A pydantic model, a dataclass, a dict or a plain value prints as one JSON document on stdout. A command that returns `None` prints nothing. Exit code 0 means success.
