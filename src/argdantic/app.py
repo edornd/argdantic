@@ -218,9 +218,12 @@ class App:
         parser.set_defaults(_level=parser.prog, _choices=list(self._children))
         subparsers = parser.add_subparsers(dest="_command_name")
         for name, child in self._children.items():
+            # argparse 3.14.0 builds a default prog with colour codes, and error messages print the prog
+            prog = f"{parser.prog} {name}"
             if isinstance(child, App):
                 subparser = subparsers.add_parser(
                     name,
+                    prog=prog,
                     help=child._summary,
                     description=child.description,
                     allow_abbrev=False,
@@ -229,6 +232,7 @@ class App:
                 continue
             subparser = subparsers.add_parser(
                 name,
+                prog=prog,
                 help=child.summary,
                 description=child.summary,
                 allow_abbrev=False,

@@ -543,6 +543,28 @@ def test_missing_command_lists_the_choices_at_its_level(
     }
 
 
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["notes", "nope"], "unknown command 'nope' in 'cli notes'"),
+        (["notes"], "a command is required in 'cli notes'"),
+    ],
+)
+def test_level_name_has_no_colour_codes(
+    argv: list[str],
+    message: str,
+    cli_app: App,
+    run: Run,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # argparse 3.14.0 colours the prog it builds for a subparser when colour is on
+    monkeypatch.setenv("PYTHON_COLORS", "1")
+
+    result = run(cli_app, argv)
+
+    assert result.json()["message"] == message
+
+
 def test_unknown_flag_before_the_command_is_an_unknown_flag(cli_app: App, calls: list[str], run: Run) -> None:
     result = run(cli_app, ["--colour", "notes", "add", "--title", "milk"])
 
