@@ -16,18 +16,18 @@ A run prints exactly one JSON document on stdout: the result when it succeeds, a
 | `message` | string | One line for the reader. The wording may change; do not match on it. |
 | `retryable` | bool | Whether the same call may succeed if tried again. |
 | `hint` | string, optional | What the caller can do about it. |
-| `field_errors` | list, optional | One entry per problem with an input value. |
+| `field_errors` | list, optional | One entry per problem with an input value or a command name. |
 
 Each field error has these keys:
 
 | Key | Type | Meaning |
 | --- | --- | --- |
-| `path` | string | The dotted name of the input, such as `priority`. |
-| `code` | string | The error type: pydantic's own (`missing`, `int_parsing`, `literal_error`), or `unknown_flag` and `unexpected_argument`. |
+| `path` | string | The dotted name of the input, such as `priority`, or `command` for a command name. |
+| `code` | string | The error type: pydantic's own (`missing`, `int_parsing`, `literal_error`), or `unknown_flag`, `unexpected_argument` and `unknown_command`. |
 | `message` | string | One line for the reader. |
 | `expected` | string, optional | What the input should look like. |
 | `received` | any, optional | The value given. Omitted when the value is or holds a secret, see [Secrets](#secrets). |
-| `allowed` | list, optional | The accepted values: the choices of a `Literal` or an enum, or the valid flags for an unknown flag. |
+| `allowed` | list, optional | The accepted values: the choices of a `Literal` or an enum, the valid flags for an unknown flag, or the commands and groups for a command name. |
 | `source` | string, optional | Where the value came from. Currently always `flag`. |
 
 ## Rejected input
@@ -45,6 +45,17 @@ A value outside a `Literal` lists the accepted values:
 $ python notes.py remove --title milk --scope everyone
 {"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "field_errors": [{"path": "scope", "code": "literal_error", "message": "Input should be 'mine' or 'all'", "expected": "'mine' or 'all'", "received": "everyone", "allowed": ["mine", "all"], "source": "flag"}]}
 ```
+
+## Unknown commands
+
+A command name that does not exist gives `COMMAND_NOT_FOUND` and exit code 2. The field error lists the commands and groups at that level of the CLI in `allowed`:
+
+```console
+$ python cli.py notes ad
+{"code": "COMMAND_NOT_FOUND", "message": "unknown command 'ad' in 'cli notes'", "retryable": false, "field_errors": [{"path": "command", "code": "unknown_command", "message": "unknown command ad", "received": "ad", "allowed": ["add"], "source": "flag"}]}
+```
+
+A missing command name gives the same error, with the field error code `missing` and no `received`. The `cli.py` above is the example in [Groups](commands.md#groups).
 
 ## Secrets
 
