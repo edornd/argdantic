@@ -465,7 +465,13 @@ def test_structured_values_keep_received_outside_secrets(argv: list[str], path: 
     ],
 )
 def test_unknown_command_lists_the_choices_at_its_level(
-    argv: list[str], level: str, token: str, allowed: list[str], cli_app: App, calls: list[str], run: Run
+    argv: list[str],
+    level: str,
+    token: str,
+    allowed: list[str],
+    cli_app: App,
+    calls: list[str],
+    run: Run,
 ) -> None:
     result = run(cli_app, argv)
 
@@ -497,7 +503,12 @@ def test_unknown_command_lists_the_choices_at_its_level(
     ],
 )
 def test_missing_command_lists_the_choices_at_its_level(
-    argv: list[str], level: str, allowed: list[str], cli_app: App, calls: list[str], run: Run
+    argv: list[str],
+    level: str,
+    allowed: list[str],
+    cli_app: App,
+    calls: list[str],
+    run: Run,
 ) -> None:
     result = run(cli_app, argv)
 

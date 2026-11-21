@@ -99,7 +99,11 @@ class InputRejected(Exception):
     """Raised inside a run when the input is rejected, before the command is called."""
 
     def __init__(
-        self, message: str, field_errors: list[FieldError] | None = None, *, code: str = "VALIDATION_ERROR"
+        self,
+        message: str,
+        field_errors: list[FieldError] | None = None,
+        *,
+        code: str = "VALIDATION_ERROR",
     ) -> None:
         super().__init__(message)
         self.message = message

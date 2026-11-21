@@ -213,11 +213,19 @@ class App:
         for name, child in self._children.items():
             if isinstance(child, App):
                 subparser = subparsers.add_parser(
-                    name, help=child._summary, description=child.description, allow_abbrev=False
+                    name,
+                    help=child._summary,
+                    description=child.description,
+                    allow_abbrev=False,
                 )
                 child._add_children(subparser)
                 continue
-            subparser = subparsers.add_parser(name, help=child.summary, description=child.summary, allow_abbrev=False)
+            subparser = subparsers.add_parser(
+                name,
+                help=child.summary,
+                description=child.summary,
+                allow_abbrev=False,
+            )
             source = CliSettingsSource(child.model, root_parser=subparser)
             subparser.set_defaults(_leaf=_Leaf(child, source, _flags(subparser)))
 
