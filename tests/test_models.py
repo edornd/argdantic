@@ -2,7 +2,16 @@ from typing import Annotated, Any, Literal
 
 import pytest
 from conftest import Run
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, computed_field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    computed_field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from argdantic import App, Flat
@@ -79,6 +88,30 @@ class Aliased(BaseModel):
 
 class Warmup(BaseModel):
     warm: int = Field(2, validation_alias="warmup_steps")
+
+
+class Serialized(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    epochs: int = Field(3, serialization_alias="numEpochs")
+    tag: str = "x"
+
+    @field_serializer("tag")
+    def loud(self, value: str) -> str:
+        return f"{value}!"
+
+
+class Data(BaseModel):
+    path: str = "data"
+    model: str = "bert"
+
+
+class Width(BaseModel):
+    width: int = 1
+
+
+NINE_EPOCHS = Serialized(epochs=9)
+CONFIG_FIELD = Field(alias="config", description="the config")
 
 
 class Env(BaseSettings):
@@ -168,6 +201,55 @@ def test_annotated_default_factory_is_used(run: Run) -> None:
     result = run(app, ["train"])
 
     assert result.json() == {"size": 2, "epochs": 3}
+
+
+def test_default_instance_merge_ignores_serialization_settings(run: Run) -> None:
+    app = App("ml")
+
+    @app.command
+    def train(cfg: Serialized = NINE_EPOCHS) -> list[int | str]:
+        return [cfg.epochs, cfg.tag]
+
+    result = run(app, ["train", "--cfg.tag", "y"])
+
+    assert result.json() == [9, "y"]
+
+
+def test_optional_model_default_instance_keeps_its_other_values(run: Run) -> None:
+    app = App("ml")
+
+    @app.command
+    def train(cfg: TrainConfig | None = FIVE_EPOCHS) -> TrainConfig | None:
+        return cfg
+
+    result = run(app, ["train", "--cfg.optim.lr", "0.5"])
+
+    assert result.json() == {"optim": {"lr": 0.5}, "epochs": 5}
+
+
+def test_all_default_model_parameter_keeps_its_field_alias(run: Run) -> None:
+    app = App("ml")
+
+    @app.command
+    def train(cfg: TrainConfig = CONFIG_FIELD) -> TrainConfig:
+        return cfg
+
+    result = run(app, ["train", "--config.epochs", "4"])
+
+    assert result.json() == {"optim": {"lr": 0.1}, "epochs": 4}
+
+
+def test_bad_env_value_reports_the_parameter_path(monkeypatch: pytest.MonkeyPatch, run: Run) -> None:
+    monkeypatch.setenv("TRAIN_EPOCHS", "abc")
+    app = App("ml")
+
+    @app.command
+    def train(env: Env) -> Env:
+        return env
+
+    result = run(app, ["train"])
+
+    assert result.json()["field_errors"][0]["path"] == "env.epochs"
 
 
 def test_default_instance_with_computed_and_secret_fields_merges(run: Run) -> None:
@@ -266,12 +348,16 @@ def _flat_and_plain(optim: Flat[Optim], lr: float = 1.0) -> None: ...
 def _alias_and_plain(cfg: Flat[Aliased], steps: int = 1) -> None: ...
 
 
+def _annotated_alias(cfg: Flat[Optim], rate: Annotated[float, Field(alias="lr")] = 1.0) -> None: ...
+
+
 @pytest.mark.parametrize(
     ("fn", "match"),
     [
         (_flat_pair, "`--lr` comes from `optim: Flat\\[Optim\\]` and `sched: Flat\\[Sched\\]`"),
         (_flat_and_plain, "`--lr` comes from `optim: Flat\\[Optim\\]` and `lr`"),
         (_alias_and_plain, "`--steps` comes from `cfg: Flat\\[Aliased\\]` and `steps`"),
+        (_annotated_alias, "`--lr` comes from `cfg: Flat\\[Optim\\]` and `rate`"),
     ],
 )
 def test_flag_name_clash_raises_at_definition(fn: Any, match: str) -> None:
@@ -279,6 +365,18 @@ def test_flag_name_clash_raises_at_definition(fn: Any, match: str) -> None:
 
     with pytest.raises(ValueError, match=match):
         app.command(fn)
+
+
+def test_flat_parameter_name_may_match_a_field_of_another_flat_model(run: Run) -> None:
+    app = App("ml")
+
+    @app.command
+    def train(model: Flat[Width], data: Flat[Data]) -> list[int | str]:
+        return [model.width, data.model]
+
+    result = run(app, ["train", "--width", "4", "--model", "gpt"])
+
+    assert result.json() == [4, "gpt"]
 
 
 def test_prefixed_field_and_plain_parameter_may_share_a_name(run: Run) -> None:

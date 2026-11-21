@@ -1,9 +1,10 @@
 import argparse
 import inspect
 import json
+import types
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, NoReturn, TypeVar, get_args, get_origin, overload
+from typing import Annotated, Any, NoReturn, TypeVar, Union, get_args, get_origin, overload
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, create_model
 from pydantic.fields import FieldInfo
@@ -66,7 +67,9 @@ class SafetyHints:
 class ModelParam:
     """A parameter annotated with a pydantic model."""
 
-    required: bool
+    # with no default and no flags, the model validates from `{}` inside the input model, so each missing field
+    # and each bad env value is reported on its own path
+    empty_when_unset: bool
     # the field as the author declared it, when its default (an instance or a factory's result) is what the flags
     # given for this parameter update
     declared: FieldInfo | None
@@ -108,18 +111,24 @@ def _pascal_case(name: str) -> str:
     return name.title().replace("_", "")
 
 
-def _model_class(annotation: Any) -> type[BaseModel] | None:
-    """The pydantic model class an annotation names, through `Annotated`, or None."""
+def _model_class(annotation: Any, *, optional: bool = False) -> type[BaseModel] | None:
+    """The pydantic model class an annotation names, through `Annotated` and, if `optional`, `X | None`, or None."""
     if get_origin(annotation) is Annotated:
         annotation = get_args(annotation)[0]
+    if optional and get_origin(annotation) in (Union, types.UnionType):
+        members = [member for member in get_args(annotation) if member is not type(None)]
+        annotation = members[0] if len(members) == 1 else None
     return annotation if isinstance(annotation, type) and issubclass(annotation, BaseModel) else None
 
 
-def _deep_merge(base: Mapping[str, Any], update: Mapping[str, Any]) -> dict[str, Any]:
-    """A new dict: mappings in both merge key by key, any other value in `update` replaces."""
+def _deep_merge(base: Mapping[str, Any] | BaseModel, update: Mapping[str, Any]) -> dict[str, Any]:
+    """A new dict: a mapping in `update` merges into a mapping or model in `base`, any other value replaces."""
+    if isinstance(base, BaseModel):
+        # read by attribute under the raw keys, so the author's serialization settings play no part
+        base = {_raw_key(info, name): getattr(base, name) for name, info in type(base).model_fields.items()}
     merged = dict(base)
     for key, value in update.items():
-        nested = isinstance(merged.get(key), Mapping) and isinstance(value, Mapping)
+        nested = isinstance(value, Mapping) and isinstance(merged.get(key), Mapping | BaseModel)
         merged[key] = _deep_merge(merged[key], value) if nested else value
     return merged
 
@@ -180,17 +189,13 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
             )
         # a `Field(...)` default holds the field's settings, as it does in a pydantic model
         field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
-        if model_class is not None:
-            # the default may also sit in a Field in the annotation
-            declared = FieldInfo.from_annotated_attribute(annotation, field)
-            buildable = not any(info.is_required() for info in model_class.model_fields.values())
-            if declared.is_required() and buildable:
-                # built at run time, so a BaseSettings model reads env only when the command runs
-                field = FieldInfo.from_field(default_factory=model_class)
+        # the default and the alias may also sit in a Field in the annotation
+        declared = FieldInfo.from_annotated_attribute(annotation, field)
+        if _model_class(annotation, optional=True) is not None:
             # a factory that takes the validated data has nothing to give before validation
             own = not declared.is_required() and not declared.default_factory_takes_validated_data
             model_params[param_name] = ModelParam(
-                required=declared.is_required() and not buildable,
+                empty_when_unset=model_class is not None and declared.is_required(),
                 declared=declared if own else None,
             )
         # Field(description=...) in the annotation or the default wins over the docstring
@@ -200,7 +205,7 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         fields[param_name] = (annotation, field)
         if model_class is None or not _is_flat(param.annotation):
             flag_fields[param_name] = fields[param_name]
-            owners.append((_kebab_case(_raw_key(field, param_name)), f"`{param_name}`"))
+            owners.append((_kebab_case(_raw_key(declared, param_name)), f"`{param_name}`"))
             continue
         instance = model_params[param_name].instance
         for name, info in model_class.model_fields.items():
@@ -401,18 +406,17 @@ class App:
         """The raw values from the flags, with the model parameter defaults applied."""
         raw = leaf.source(parsed_args=parsed_args)()
         fields = leaf.spec.model.model_fields
-        for name, keys in leaf.spec.flat.items():
-            group = {key: raw.pop(key) for key in keys if key in raw}
-            if group:
-                raw[_raw_key(fields[name], name)] = group
+        # every group comes out before any goes back, since a Flat parameter may share its name with a field of
+        # another Flat model
+        groups = {name: {key: raw.pop(key) for key in keys if key in raw} for name, keys in leaf.spec.flat.items()}
+        raw.update({_raw_key(fields[name], name): group for name, group in groups.items() if group})
         for name, param in leaf.spec.model_params.items():
             key = _raw_key(fields[name], name)
-            if key in raw:
-                if (base := param.base()) is not None:
-                    raw[key] = _deep_merge(base.model_dump(by_alias=True, round_trip=True), raw[key])
-            elif param.required:
-                # each missing field is then reported on its own path, not the parameter as a whole
-                raw[key] = {}
+            if key not in raw:
+                if param.empty_when_unset:
+                    raw[key] = {}
+            elif isinstance(raw[key], Mapping) and (base := param.base()) is not None:
+                raw[key] = _deep_merge(base, raw[key])
         return raw
 
     def _run(self, argv: Sequence[str] | None) -> str | None:
