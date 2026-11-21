@@ -1,15 +1,14 @@
 import argparse
 import inspect
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, NoReturn, TypeVar, overload
+from typing import Annotated, Any, NoReturn, TypeVar, get_args, get_origin, overload
 
-from pydantic import Field, TypeAdapter, ValidationError, create_model
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, create_model
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
-    CliApp,
     CliSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
@@ -55,6 +54,15 @@ class SafetyHints:
 
 
 @dataclass(frozen=True)
+class ModelParam:
+    """A parameter annotated with a pydantic model."""
+
+    required: bool
+    # the default instance, which the flags given for this parameter update
+    default: BaseModel | None
+
+
+@dataclass(frozen=True)
 class CommandSpec:
     """Everything argdantic knows about one command, built once at registration."""
 
@@ -64,6 +72,7 @@ class CommandSpec:
     output: TypeAdapter[Any]
     hints: SafetyHints
     summary: str
+    model_params: dict[str, ModelParam]
 
 
 def _kebab_case(name: str) -> str:
@@ -74,6 +83,22 @@ def _pascal_case(name: str) -> str:
     return name.title().replace("_", "")
 
 
+def _model_class(annotation: Any) -> type[BaseModel] | None:
+    """The pydantic model class an annotation names, through `Annotated`, or None."""
+    if get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    return annotation if isinstance(annotation, type) and issubclass(annotation, BaseModel) else None
+
+
+def _deep_merge(base: Mapping[str, Any], update: Mapping[str, Any]) -> dict[str, Any]:
+    """A new dict: mappings in both merge key by key, any other value in `update` replaces."""
+    merged = dict(base)
+    for key, value in update.items():
+        nested = isinstance(merged.get(key), Mapping) and isinstance(value, Mapping)
+        merged[key] = _deep_merge(merged[key], value) if nested else value
+    return merged
+
+
 def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     # the command name comes from __name__, which partials and callable instances lack
     fn_name = getattr(fn, "__name__", None)
@@ -82,11 +107,20 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     signature = inspect.signature(fn, eval_str=True)
     summary, param_descriptions = parse_docstring(inspect.getdoc(fn) or "")
     fields: dict[str, Any] = {}
+    model_params: dict[str, ModelParam] = {}
     for param_name, param in signature.parameters.items():
         default = ... if param.default is param.empty else param.default
-        # a `Field(...)` default holds the field's settings, as it does in a pydantic model
-        field = default if isinstance(default, FieldInfo) else Field(default)
         annotation = param.annotation
+        model_class = _model_class(annotation)
+        # a `Field(...)` default holds the field's settings, as it does in a pydantic model
+        field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
+        if model_class is not None:
+            buildable = not any(info.is_required() for info in model_class.model_fields.values())
+            if default is ... and buildable:
+                # built at run time, so a BaseSettings model reads env only when the command runs
+                field = FieldInfo.from_field(default_factory=model_class)
+            instance = field.default if isinstance(field.default, BaseModel) else None
+            model_params[param_name] = ModelParam(required=field.is_required(), default=instance)
         # Field(description=...) in the annotation or the default wins over the docstring
         described = FieldInfo.from_annotation(annotation).description or field.description
         if not described and param_name in param_descriptions:
@@ -106,6 +140,7 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         output=TypeAdapter(returns),
         hints=hints,
         summary=summary,
+        model_params=model_params,
     )
 
 
@@ -267,6 +302,21 @@ class App:
             print(output)
         raise SystemExit(ExitCode.OK)
 
+    @staticmethod
+    def _inputs(leaf: _Leaf, parsed_args: argparse.Namespace) -> dict[str, Any]:
+        """The raw values from the flags, with the model parameter defaults applied."""
+        raw = leaf.source(parsed_args=parsed_args)()
+        fields = leaf.spec.model.model_fields
+        for name, param in leaf.spec.model_params.items():
+            # pydantic-settings keys the raw values by alias
+            key = fields[name].alias or name
+            if key in raw and param.default is not None:
+                raw[key] = _deep_merge(param.default.model_dump(by_alias=True, round_trip=True), raw[key])
+            elif key not in raw and param.required:
+                # each missing field is then reported on its own path, not the parameter as a whole
+                raw[key] = {}
+        return raw
+
     def _run(self, argv: Sequence[str] | None) -> str | None:
         """The rendered result, or None when there is nothing to print."""
         parsed_args, leftovers = self._parser().parse_known_args(argv)
@@ -275,7 +325,7 @@ class App:
         leaf: _Leaf = parsed_args._leaf
         spec = leaf.spec
         try:
-            command_inputs = CliApp.run(spec.model, cli_args=parsed_args, cli_settings_source=leaf.source)
+            command_inputs = spec.model(**self._inputs(leaf, parsed_args))
         except (ValidationError, SettingsError) as error:
             raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error) from None
         if leftovers:
