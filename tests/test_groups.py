@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from conftest import Run
 
@@ -67,6 +69,24 @@ def test_root_help_lists_commands_and_groups_with_their_summaries(cli_app: App, 
     for text in ("Manage notes.", "notes", "Work with notes.", "sync", "Sync everything."):
         assert text in result.out
     assert "Notes are plain text." not in result.out
+
+
+def test_triple_quoted_group_description_gives_a_summary(run: Run) -> None:
+    notes = App(
+        "notes",
+        description="""
+        Work with notes.
+
+        Notes are plain text.
+        """,
+    )
+    cli = App("cli")
+    cli.add(notes)
+
+    result = run(cli, ["--help"])
+
+    assert result.code == 0
+    assert re.search(r"^\s+notes\s+Work with notes\.$", result.out, re.MULTILINE)
 
 
 def test_group_help_lists_its_commands_and_groups(cli_app: App, run: Run) -> None:

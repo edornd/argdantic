@@ -200,7 +200,7 @@ class App:
 
     @property
     def _summary(self) -> str:
-        return parse_docstring(self.description or "")[0]
+        return parse_docstring(inspect.cleandoc(self.description or ""))[0]
 
     def _parser(self) -> argparse.ArgumentParser:
         # allow_abbrev=False stops argparse expanding a prefix like --ti to --title
