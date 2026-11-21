@@ -6,7 +6,7 @@ import re
 import sys
 import traceback
 import typing
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Mapping
 from types import NoneType
 from typing import Any, ForwardRef, NoReturn, Self, get_args, get_origin
 
@@ -111,9 +111,8 @@ class InputRejected(Exception):
         self.code = code
 
     @classmethod
-    def command_not_found(cls, path: Sequence[str], allowed: list[str], token: str | None = None) -> Self:
-        """An unknown command `token`, or a missing one when it is None, at the level `path` names."""
-        level = " ".join(path)
+    def command_not_found(cls, level: str, allowed: list[str], token: str | None = None) -> Self:
+        """An unknown command `token`, or a missing one when it is None, in the group `level`, such as "cli notes"."""
         if token is None:
             message, field_message = f"a command is required in '{level}'", "a command is required"
         else:

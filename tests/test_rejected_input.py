@@ -462,6 +462,8 @@ def test_structured_values_keep_received_outside_secrets(argv: list[str], path: 
         (["nots"], "cli", "nots", ["notes", "sync"]),
         (["notes", "tgas", "rename"], "cli notes", "tgas", ["add", "tags"]),
         (["notes", "tags", "remove", "--old", "a"], "cli notes tags", "remove", ["rename"]),
+        # argparse cannot know that an unknown --title takes a value, so x is read as the command
+        (["notes", "--title", "x"], "cli notes", "x", ["add", "tags"]),
     ],
 )
 def test_unknown_command_lists_the_choices_at_its_level(
@@ -499,7 +501,7 @@ def test_unknown_command_lists_the_choices_at_its_level(
     [
         ([], "cli", ["notes", "sync"]),
         (["notes"], "cli notes", ["add", "tags"]),
-        (["notes", "--title", "x"], "cli notes", ["add", "tags"]),
+        (["notes", "--title=x"], "cli notes", ["add", "tags"]),
     ],
 )
 def test_missing_command_lists_the_choices_at_its_level(
@@ -528,6 +530,16 @@ def test_missing_command_lists_the_choices_at_its_level(
             }
         ],
     }
+
+
+def test_unknown_flag_before_the_command_is_an_unknown_flag(cli_app: App, calls: list[str], run: Run) -> None:
+    result = run(cli_app, ["--colour", "notes", "add", "--title", "milk"])
+
+    assert result.code == 2
+    assert calls == []
+    assert result.json()["code"] == "VALIDATION_ERROR"
+    [field_error] = result.json()["field_errors"]
+    assert (field_error["path"], field_error["code"], field_error["received"]) == ("colour", "unknown_flag", "--colour")
 
 
 def test_app_without_commands_has_no_choices(run: Run) -> None:

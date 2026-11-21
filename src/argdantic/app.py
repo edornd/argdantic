@@ -1,7 +1,6 @@
 import argparse
 import inspect
 import json
-import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Annotated, Any, NoReturn, TypeVar, overload
@@ -115,6 +114,12 @@ class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         raise InputRejected(message)
 
+    def _check_value(self, action: argparse.Action, value: Any) -> None:
+        # argparse reports an unknown command only as text, so raise the structured error before it does
+        if isinstance(action, argparse._SubParsersAction) and value not in action.choices:
+            raise InputRejected.command_not_found(self.prog, list(action.choices), value)
+        super()._check_value(action, value)
+
 
 def _flags(parser: argparse.ArgumentParser) -> list[str]:
     """Every flag spelling a leaf accepts, except help."""
@@ -209,7 +214,9 @@ class App:
         return parser
 
     def _add_children(self, parser: argparse.ArgumentParser) -> None:
-        subparsers = parser.add_subparsers(dest="_command_name", required=True)
+        # each group on the path overwrites these, so a missing command is reported at the deepest one
+        parser.set_defaults(_level=parser.prog, _choices=list(self._children))
+        subparsers = parser.add_subparsers(dest="_command_name")
         for name, child in self._children.items():
             if isinstance(child, App):
                 subparser = subparsers.add_parser(
@@ -241,9 +248,9 @@ class App:
 
     def _run(self, argv: Sequence[str] | None) -> str | None:
         """The rendered result, or None when there is nothing to print."""
-        argv = sys.argv[1:] if argv is None else list(argv)
-        self._check_command_path(argv)
         parsed_args, leftovers = self._parser().parse_known_args(argv)
+        if not hasattr(parsed_args, "_leaf"):
+            raise InputRejected.command_not_found(parsed_args._level, parsed_args._choices)
         leaf: _Leaf = parsed_args._leaf
         spec = leaf.spec
         try:
@@ -256,20 +263,3 @@ class App:
         if result is None:
             return None
         return json.dumps(spec.output.dump_python(result, mode="json"))
-
-    def _check_command_path(self, argv: Sequence[str]) -> None:
-        """Walk argv down the tree to a command, so a wrong or missing name gets its choices, not argparse's text."""
-        app, path = self, [self.name]
-        for token in argv:
-            if token in ("-h", "--help"):
-                return
-            if token.startswith("-"):
-                # a flag where a command name should be: the name is missing, not unknown
-                break
-            child = app._children.get(token)
-            if child is None:
-                raise InputRejected.command_not_found(path, list(app._children), token)
-            if isinstance(child, CommandSpec):
-                return
-            app, path = child, [*path, token]
-        raise InputRejected.command_not_found(path, list(app._children))
