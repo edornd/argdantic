@@ -512,6 +512,7 @@ def test_unknown_command_lists_the_choices_at_its_level(
     [
         ([], "cli", ["notes", "sync"]),
         (["notes"], "cli notes", ["add", "tags"]),
+        (["notes", "tags"], "cli notes tags", ["rename"]),
         (["notes", "--title=x"], "cli notes", ["add", "tags"]),
     ],
 )

@@ -57,6 +57,8 @@ $ python cli.py notes ad
 
 A missing command name gives the same error, with the field error code `missing` and no `received`. The `cli.py` above is the example in [Groups](commands.md#groups).
 
+argdantic finds the command before it checks the flags, so this error reports only the command name. A command's flags go after the command name. In `python cli.py notes --title milk`, argdantic reads `milk` as the command name and reports it as unknown.
+
 ## Secrets
 
 A field error has no `received` when the rejected value is or holds a `SecretStr`, `SecretBytes` or `Secret`, subclasses included. A model with a password field whose own validator fails has no `received`, because it would echo the password.

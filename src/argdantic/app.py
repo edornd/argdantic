@@ -111,6 +111,11 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
 class _Parser(argparse.ArgumentParser):
     """An ArgumentParser that raises its errors instead of printing usage and exiting."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        # argparse joins the paragraphs of a description into one by default
+        kwargs.setdefault("formatter_class", argparse.RawDescriptionHelpFormatter)
+        super().__init__(*args, **kwargs)
+
     def error(self, message: str) -> NoReturn:
         raise InputRejected(message)
 
@@ -142,11 +147,18 @@ class _Leaf:
 
 
 class App:
-    """A CLI: a named tree of commands that runs from an argv list."""
+    """A CLI: a named tree of commands that runs from an argv list.
+
+    Args:
+        name: the program name in usage lines and errors. For a mounted App, also the token that selects it on the
+            command line.
+        description: the help text. Its first line is the summary in the parent's `--help`.
+    """
 
     def __init__(self, name: str, *, description: str | None = None) -> None:
         self.name = name
-        self.description = description
+        # help prints the description as written, so a triple-quoted one loses its indentation here
+        self.description = inspect.cleandoc(description) if description else None
         self._children: dict[str, CommandSpec | App] = {}
 
     @overload
@@ -205,7 +217,7 @@ class App:
 
     @property
     def _summary(self) -> str:
-        return parse_docstring(inspect.cleandoc(self.description or ""))[0]
+        return parse_docstring(self.description or "")[0]
 
     def _parser(self) -> argparse.ArgumentParser:
         # allow_abbrev=False stops argparse expanding a prefix like --ti to --title
@@ -214,17 +226,21 @@ class App:
         return parser
 
     def _add_children(self, parser: argparse.ArgumentParser) -> None:
-        # each group on the path overwrites these, so a missing command is reported at the deepest one
-        parser.set_defaults(_level=parser.prog, _choices=list(self._children))
+        # each group on the path overwrites these, so a missing command is reported at the deepest one. A tuple,
+        # because pydantic-settings parses every list in argparse's result as input
+        parser.set_defaults(_level=parser.prog, _choices=tuple(self._children))
+        # not required=True: argparse would then report a missing command as text, before _run can
         subparsers = parser.add_subparsers(dest="_command_name")
         for name, child in self._children.items():
             # argparse 3.14.0 builds a default prog with colour codes, and error messages print the prog
             prog = f"{parser.prog} {name}"
+            # argparse %-formats help text, so a literal % is doubled
+            summary = (child._summary if isinstance(child, App) else child.summary).replace("%", "%%")
             if isinstance(child, App):
                 subparser = subparsers.add_parser(
                     name,
                     prog=prog,
-                    help=child._summary,
+                    help=summary,
                     description=child.description,
                     allow_abbrev=False,
                 )
@@ -233,7 +249,7 @@ class App:
             subparser = subparsers.add_parser(
                 name,
                 prog=prog,
-                help=child.summary,
+                help=summary,
                 description=child.summary,
                 allow_abbrev=False,
             )
@@ -254,7 +270,7 @@ class App:
         """The rendered result, or None when there is nothing to print."""
         parsed_args, leftovers = self._parser().parse_known_args(argv)
         if not hasattr(parsed_args, "_leaf"):
-            raise InputRejected.command_not_found(parsed_args._level, parsed_args._choices)
+            raise InputRejected.command_not_found(parsed_args._level, list(parsed_args._choices))
         leaf: _Leaf = parsed_args._leaf
         spec = leaf.spec
         try:

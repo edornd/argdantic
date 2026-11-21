@@ -6,6 +6,27 @@ from conftest import Run
 from argdantic import App
 
 
+def _lists(help_text: str, name: str, summary: str) -> bool:
+    """Whether the help lists `name` with `summary` on the same line."""
+    return re.search(rf"^\s+{re.escape(name)}\s+{re.escape(summary)}$", help_text, re.MULTILINE) is not None
+
+
+def _cli_with_shared_tags() -> App:
+    """`cli` with the group `tags` mounted twice: as `cli tags` and as `cli notes tags`."""
+    tags = App("tags")
+
+    @tags.command
+    def rename(old: str, new: str) -> str:
+        return new
+
+    notes = App("notes")
+    notes.add(tags)
+    cli = App("cli")
+    cli.add(notes)
+    cli.add(tags)
+    return cli
+
+
 def test_command_in_a_group_runs_at_any_depth(cli_app: App, calls: list[str], run: Run) -> None:
     added = run(cli_app, ["notes", "add", "--title", "milk"])
     renamed = run(cli_app, ["notes", "tags", "rename", "--old", "a", "--new", "b"])
@@ -43,17 +64,7 @@ def test_command_registered_after_add_is_reachable(run: Run) -> None:
 
 
 def test_app_mounted_under_two_parents_runs_through_both(run: Run) -> None:
-    tags = App("tags")
-
-    @tags.command
-    def rename(old: str, new: str) -> str:
-        return new
-
-    notes = App("notes")
-    notes.add(tags)
-    cli = App("cli")
-    cli.add(notes)
-    cli.add(tags)
+    cli = _cli_with_shared_tags()
 
     direct = run(cli, ["tags", "rename", "--old", "a", "--new", "b"])
     nested = run(cli, ["notes", "tags", "rename", "--old", "a", "--new", "c"])
@@ -62,12 +73,23 @@ def test_app_mounted_under_two_parents_runs_through_both(run: Run) -> None:
     assert (nested.code, nested.json()) == (0, "c")
 
 
+def test_error_in_a_shared_group_names_the_path_taken(run: Run) -> None:
+    cli = _cli_with_shared_tags()
+
+    direct = run(cli, ["tags", "nope"])
+    nested = run(cli, ["notes", "tags", "nope"])
+
+    assert direct.json()["message"] == "unknown command 'nope' in 'cli tags'"
+    assert nested.json()["message"] == "unknown command 'nope' in 'cli notes tags'"
+
+
 def test_root_help_lists_commands_and_groups_with_their_summaries(cli_app: App, run: Run) -> None:
     result = run(cli_app, ["--help"])
 
     assert result.code == 0
-    for text in ("Manage notes.", "notes", "Work with notes.", "sync", "Sync everything."):
-        assert text in result.out
+    assert "Manage notes." in result.out
+    assert _lists(result.out, "notes", "Work with notes.")
+    assert _lists(result.out, "sync", "Sync everything.")
     assert "Notes are plain text." not in result.out
 
 
@@ -86,15 +108,17 @@ def test_triple_quoted_group_description_gives_a_summary(run: Run) -> None:
     result = run(cli, ["--help"])
 
     assert result.code == 0
-    assert re.search(r"^\s+notes\s+Work with notes\.$", result.out, re.MULTILINE)
+    assert _lists(result.out, "notes", "Work with notes.")
 
 
 def test_group_help_lists_its_commands_and_groups(cli_app: App, run: Run) -> None:
     result = run(cli_app, ["notes", "--help"])
 
     assert result.code == 0
-    for text in ("cli notes", "Notes are plain text.", "add", "Add a note.", "tags", "Manage tags."):
-        assert text in result.out
+    assert result.out.startswith("usage: cli notes ")
+    assert "\nWork with notes.\n\nNotes are plain text.\n" in result.out
+    assert _lists(result.out, "add", "Add a note.")
+    assert _lists(result.out, "tags", "Manage tags.")
     assert "Sync everything." not in result.out
 
 
@@ -104,6 +128,54 @@ def test_command_help_works_inside_a_group(cli_app: App, run: Run) -> None:
     assert result.code == 0
     assert "Add a note." in result.out
     assert "--title" in result.out
+
+
+@pytest.mark.parametrize("mounted", [True, False])
+def test_help_keeps_the_paragraphs_of_a_triple_quoted_description(mounted: bool, run: Run) -> None:
+    notes = App(
+        "notes",
+        description="""
+        Work with notes.
+
+        Notes are plain text.
+        """,
+    )
+    cli = App("cli")
+    cli.add(notes)
+
+    result = run(cli, ["notes", "--help"]) if mounted else run(notes, ["--help"])
+
+    assert result.code == 0
+    assert "\nWork with notes.\n\nNotes are plain text.\n" in result.out
+
+
+def test_percent_sign_in_a_summary_shows_in_help(run: Run) -> None:
+    cli = App("cli")
+    cli.add(App("notes", description="Use 100% of notes."))
+
+    @cli.command
+    def sync() -> None:
+        """Sync 100% of notes."""
+
+    result = run(cli, ["--help"])
+
+    assert result.code == 0
+    assert _lists(result.out, "notes", "Use 100% of notes.")
+    assert _lists(result.out, "sync", "Sync 100% of notes.")
+
+
+def test_group_name_with_a_bracket_leaves_other_commands_working(run: Run) -> None:
+    # pydantic-settings parses a list it finds in argparse's result as input, and "[beta" is not valid input
+    cli = App("cli")
+    cli.add(App("[beta"))
+
+    @cli.command
+    def sync() -> str:
+        return "synced"
+
+    result = run(cli, ["sync"])
+
+    assert (result.code, result.json()) == (0, "synced")
 
 
 def test_unknown_flag_in_a_group_lists_the_command_flags(cli_app: App, calls: list[str], run: Run) -> None:

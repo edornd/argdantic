@@ -113,13 +113,14 @@ class InputRejected(Exception):
     @classmethod
     def command_not_found(cls, level: str, allowed: list[str], token: str | None = None) -> Self:
         """An unknown command `token`, or a missing one when it is None, in the group `level`, such as "cli notes"."""
-        if token is None:
-            message, field_message = f"a command is required in '{level}'", "a command is required"
-        else:
-            message, field_message = f"unknown command '{token}' in '{level}'", f"unknown command {token}"
+        code, message, field_message = (
+            ("missing", f"a command is required in '{level}'", "a command is required")
+            if token is None
+            else ("unknown_command", f"unknown command '{token}' in '{level}'", f"unknown command {token}")
+        )
         field_error = FieldError(
             path="command",
-            code="missing" if token is None else "unknown_command",
+            code=code,
             message=field_message,
             received=token,
             allowed=allowed,
