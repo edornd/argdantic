@@ -16,7 +16,7 @@ class Outcome(NamedTuple):
         return json.loads(self.out)
 
 
-Run = Callable[[App, list[str]], Outcome]
+Run = Callable[[App, list[str] | None], Outcome]
 RunRaising = Callable[[BaseException], Outcome]
 
 
@@ -24,7 +24,7 @@ RunRaising = Callable[[BaseException], Outcome]
 def run(capsys: pytest.CaptureFixture[str]) -> Run:
     """Run an app on argv and capture its exit code and output."""
 
-    def run_app(app: App, argv: list[str]) -> Outcome:
+    def run_app(app: App, argv: list[str] | None) -> Outcome:
         with pytest.raises(SystemExit) as exc:
             app(argv)
         code = exc.value.code
@@ -66,3 +66,32 @@ def run_raising(run: Run) -> RunRaising:
         return run(app, ["add"])
 
     return run_with
+
+
+@pytest.fixture
+def cli_app(calls: list[str]) -> App:
+    """`cli` with a group `notes` (command `add`, nested group `tags`) and a root command `sync`."""
+    tags = App("tags", description="Manage tags.")
+
+    @tags.command
+    def rename(old: str, new: str) -> str:
+        """Rename a tag."""
+        return new
+
+    notes = App("notes", description="Work with notes.\n\nNotes are plain text.")
+
+    @notes.command
+    def add(title: str) -> str:
+        """Add a note."""
+        calls.append(title)
+        return title
+
+    notes.add(tags)
+    cli = App("cli", description="Manage notes.")
+    cli.add(notes)
+
+    @cli.command
+    def sync() -> None:
+        """Sync everything."""
+
+    return cli

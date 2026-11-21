@@ -195,7 +195,12 @@ def test_choice_errors_list_the_allowed_values(argv: list[str], expected: dict[s
     ],
 )
 def test_unknown_flag_lists_the_valid_flags(
-    argv: list[str], path: str, received: str, notes_app: App, calls: list[str], run: Run
+    argv: list[str],
+    path: str,
+    received: str,
+    notes_app: App,
+    calls: list[str],
+    run: Run,
 ) -> None:
     result = run(notes_app, ["add", *argv])
 
@@ -235,7 +240,10 @@ def test_stray_token_is_an_unexpected_argument(notes_app: App, calls: list[str],
     [(["--", "extra"], ["--", "extra"]), (["-.5"], ["-.5"]), (["-1e3"], ["-1e3"]), (["-"], ["-"])],
 )
 def test_separator_and_negative_numbers_are_not_flags(
-    argv: list[str], tokens: list[str], notes_app: App, run: Run
+    argv: list[str],
+    tokens: list[str],
+    notes_app: App,
+    run: Run,
 ) -> None:
     result = run(notes_app, ["add", *argv])
 
@@ -340,7 +348,10 @@ def test_secret_fields_never_echo_the_received_value(argv: list[str], path: str,
     ],
 )
 def test_received_is_hidden_for_secrets_and_unresolved_paths(
-    argv: list[str], path: str, received: str | None, run: Run
+    argv: list[str],
+    path: str,
+    received: str | None,
+    run: Run,
 ) -> None:
     app = App("auth")
 
@@ -454,3 +465,128 @@ def test_structured_values_keep_received_outside_secrets(argv: list[str], path: 
     assert result.code == 2
     [field_error] = [item for item in result.json()["field_errors"] if item["path"] == path]
     assert field_error.get("received") == received
+
+
+@pytest.mark.parametrize(
+    ("argv", "level", "token", "allowed"),
+    [
+        (["nots"], "cli", "nots", ["notes", "sync"]),
+        (["notes", "tgas", "rename"], "cli notes", "tgas", ["add", "tags"]),
+        (["notes", "tags", "remove", "--old", "a"], "cli notes tags", "remove", ["rename"]),
+        # argparse cannot know that an unknown --title takes a value, so x is read as the command
+        (["notes", "--title", "x"], "cli notes", "x", ["add", "tags"]),
+    ],
+)
+def test_unknown_command_lists_the_choices_at_its_level(
+    argv: list[str],
+    level: str,
+    token: str,
+    allowed: list[str],
+    cli_app: App,
+    calls: list[str],
+    run: Run,
+) -> None:
+    result = run(cli_app, argv)
+
+    assert result.code == 2
+    assert calls == []
+    assert result.json() == {
+        "code": "COMMAND_NOT_FOUND",
+        "message": f"unknown command '{token}' in '{level}'",
+        "retryable": False,
+        "field_errors": [
+            {
+                "path": "command",
+                "code": "unknown_command",
+                "message": f"unknown command {token}",
+                "received": token,
+                "allowed": allowed,
+                "source": "flag",
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("argv", "level", "allowed"),
+    [
+        ([], "cli", ["notes", "sync"]),
+        (["notes"], "cli notes", ["add", "tags"]),
+        (["notes", "tags"], "cli notes tags", ["rename"]),
+        (["notes", "--title=x"], "cli notes", ["add", "tags"]),
+    ],
+)
+def test_missing_command_lists_the_choices_at_its_level(
+    argv: list[str],
+    level: str,
+    allowed: list[str],
+    cli_app: App,
+    calls: list[str],
+    run: Run,
+) -> None:
+    result = run(cli_app, argv)
+
+    assert result.code == 2
+    assert calls == []
+    assert result.json() == {
+        "code": "COMMAND_NOT_FOUND",
+        "message": f"a command is required in '{level}'",
+        "retryable": False,
+        "field_errors": [
+            {
+                "path": "command",
+                "code": "missing",
+                "message": "a command is required",
+                "allowed": allowed,
+                "source": "flag",
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["notes", "nope"], "unknown command 'nope' in 'cli notes'"),
+        (["notes"], "a command is required in 'cli notes'"),
+    ],
+)
+def test_level_name_has_no_colour_codes(
+    argv: list[str],
+    message: str,
+    cli_app: App,
+    run: Run,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # argparse 3.14.0 colours the prog it builds for a subparser when colour is on
+    monkeypatch.setenv("PYTHON_COLORS", "1")
+
+    result = run(cli_app, argv)
+
+    assert result.json()["message"] == message
+
+
+def test_unknown_flag_before_the_command_is_an_unknown_flag(cli_app: App, calls: list[str], run: Run) -> None:
+    result = run(cli_app, ["--colour", "notes", "add", "--title", "milk"])
+
+    assert result.code == 2
+    assert calls == []
+    assert result.json()["code"] == "VALIDATION_ERROR"
+    [field_error] = result.json()["field_errors"]
+    assert (field_error["path"], field_error["code"], field_error["received"]) == ("colour", "unknown_flag", "--colour")
+
+
+def test_app_without_commands_has_no_choices(run: Run) -> None:
+    result = run(App("empty"), [])
+
+    assert result.code == 2
+    assert result.json()["field_errors"][0]["allowed"] == []
+
+
+def test_argv_defaults_to_sys_argv(cli_app: App, run: Run, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["cli", "nots"])
+
+    result = run(cli_app, None)
+
+    assert result.code == 2
+    assert result.json()["field_errors"][0]["received"] == "nots"
