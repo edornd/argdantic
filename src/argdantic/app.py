@@ -268,6 +268,13 @@ class Parser(argparse.ArgumentParser):
             raise InputRejected.command_not_found(self.prog, list(action.choices), value)
         super()._check_value(action, value)
 
+    def _match_argument(self, action: argparse.Action, arg_strings_pattern: str) -> int:
+        # argparse reports a flag with no value only as text, and a value flag has one spelling
+        try:
+            return super()._match_argument(action, arg_strings_pattern)
+        except argparse.ArgumentError:
+            raise InputRejected.missing_value(action.dest, action.option_strings[0]) from None
+
 
 def _flags(parser: argparse.ArgumentParser) -> list[str]:
     """Every flag spelling a leaf accepts, except help."""

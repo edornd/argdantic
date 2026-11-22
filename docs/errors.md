@@ -23,7 +23,7 @@ Each field error has these keys:
 | Key | Type | Meaning |
 | --- | --- | --- |
 | `path` | string | The dotted name of the input, such as `priority`, or `command` for a command name. |
-| `code` | string | The error type: pydantic's own (`missing`, `int_parsing`, `literal_error`), or `unknown_flag`, `unexpected_argument` and `unknown_command`. |
+| `code` | string | The error type: pydantic's own (`missing`, `int_parsing`, `literal_error`), or `unknown_flag`, `unexpected_argument`, `missing_value` and `unknown_command`. |
 | `message` | string | One line for the reader. |
 | `expected` | string, optional | What the input should look like. |
 | `received` | any, optional | The value given. Omitted when the value is or holds a secret, see [Secrets](#secrets). |
@@ -44,6 +44,13 @@ A value outside a `Literal` lists the accepted values:
 ```console
 $ python notes.py remove --title milk --scope everyone
 {"code": "VALIDATION_ERROR", "message": "invalid input", "retryable": false, "field_errors": [{"path": "scope", "code": "literal_error", "message": "Input should be 'mine' or 'all'", "expected": "'mine' or 'all'", "received": "everyone", "allowed": ["mine", "all"], "source": "flag"}]}
+```
+
+A flag given without its value gives `missing_value`. Parsing stops there, so this error is the only one reported:
+
+```console
+$ python notes.py add --title
+{"code": "VALIDATION_ERROR", "message": "--title needs a value", "retryable": false, "field_errors": [{"path": "title", "code": "missing_value", "message": "a value is required", "received": "--title", "source": "flag"}]}
 ```
 
 ## Unknown commands
