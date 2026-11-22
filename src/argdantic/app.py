@@ -1,15 +1,15 @@
 import argparse
 import inspect
 import json
-from collections.abc import Callable, Sequence
+import types
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, NoReturn, TypeVar, overload
+from typing import Annotated, Any, NoReturn, TypeVar, Union, get_args, get_origin, overload
 
-from pydantic import Field, TypeAdapter, ValidationError, create_model
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, create_model
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
-    CliApp,
     CliSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
@@ -20,6 +20,14 @@ from argdantic.docstrings import parse_docstring
 from argdantic.errors import ExitCode, InputRejected, fail
 
 F = TypeVar("F", bound=Callable[..., Any])
+T = TypeVar("T")
+
+
+class FlatMarker:
+    """Marks a model parameter whose fields become top-level flags."""
+
+
+Flat = Annotated[T, FlatMarker()]
 
 
 class InputModel(BaseSettings):
@@ -55,6 +63,33 @@ class SafetyHints:
 
 
 @dataclass(frozen=True)
+class ModelParam:
+    """A parameter annotated with a pydantic model.
+
+    Attributes:
+        empty_when_unset: validate from `{}` when no flag is given, so errors keep their full path.
+        declared: the field as declared, with the default the flags update.
+    """
+
+    empty_when_unset: bool
+    declared: FieldInfo
+
+    @property
+    def instance(self) -> BaseModel | None:
+        """The default instance, without calling a factory."""
+        default = self.declared.default
+        return default if isinstance(default, BaseModel) else None
+
+    def base(self) -> BaseModel | None:
+        """The default the flags update: the instance, or a new one from the factory."""
+        # this factory can only run during validation
+        if self.declared.default_factory_takes_validated_data:
+            return None
+        default = self.declared.get_default(call_default_factory=True)
+        return default if isinstance(default, BaseModel) else None
+
+
+@dataclass(frozen=True)
 class CommandSpec:
     """Everything argdantic knows about one command, built once at registration."""
 
@@ -64,6 +99,11 @@ class CommandSpec:
     output: TypeAdapter[Any]
     hints: SafetyHints
     summary: str
+    model_params: dict[str, ModelParam]
+    # builds the parser, with Flat fields in place of their parameter
+    flag_model: type[InputModel]
+    # each Flat parameter, with its fields' raw keys
+    flat: dict[str, frozenset[str]]
 
 
 def _kebab_case(name: str) -> str:
@@ -74,30 +114,129 @@ def _pascal_case(name: str) -> str:
     return name.title().replace("_", "")
 
 
+def _model_class(annotation: Any, *, optional: bool = False) -> type[BaseModel] | None:
+    """The pydantic model class an annotation names, through `Annotated` and, if `optional`, `X | None`, or None."""
+    if get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    if optional and get_origin(annotation) in (Union, types.UnionType):
+        members = [member for member in get_args(annotation) if member is not type(None)]
+        annotation = members[0] if len(members) == 1 else None
+    return annotation if isinstance(annotation, type) and issubclass(annotation, BaseModel) else None
+
+
+def _deep_merge(base: Mapping[str, Any] | BaseModel, update: Mapping[str, Any]) -> dict[str, Any]:
+    """A new dict: a mapping in `update` merges into a mapping or model in `base`, any other value replaces."""
+    if isinstance(base, BaseModel):
+        # by attribute, so serialization settings play no part
+        base = {_raw_key(info, name): getattr(base, name) for name, info in type(base).model_fields.items()}
+    merged = dict(base)
+    for key, value in update.items():
+        nested = isinstance(value, Mapping) and isinstance(merged.get(key), Mapping | BaseModel)
+        merged[key] = _deep_merge(merged[key], value) if nested else value
+    return merged
+
+
+def _raw_key(info: FieldInfo, name: str) -> str:
+    """The key pydantic-settings gives a field's value in the raw dict, and the base of its flag."""
+    alias = info.validation_alias
+    return alias if isinstance(alias, str) else info.alias or name
+
+
+def _is_flat(annotation: Any) -> bool:
+    return get_origin(annotation) is Annotated and any(isinstance(m, FlatMarker) for m in annotation.__metadata__)
+
+
+def _flat_fields(
+    param_name: str,
+    model_class: type[BaseModel],
+    instance: BaseModel | None,
+) -> dict[str, Any]:
+    """The flag model's fields for a Flat parameter, keyed `<param>__<field>`, with the defaults the run uses."""
+    fields = {}
+    for name, info in model_class.model_fields.items():
+        # the flag comes from the alias, the raw key from the validation alias
+        key = _raw_key(info, name)
+        field = FieldInfo.from_field(
+            info.default if instance is None else getattr(instance, name),
+            default_factory=info.default_factory if instance is None else None,
+            alias=key,
+            validation_alias=key,
+            description=info.description,
+        )
+        fields[f"{param_name}__{name}"] = (info.annotation, field)
+    return fields
+
+
+def _check_flag_names(owners: list[tuple[str, str]]) -> None:
+    """Raise when two parameters or Flat fields give the same top-level flag."""
+    seen: dict[str, str] = {}
+    for flag, owner in owners:
+        if flag in seen:
+            raise ValueError(f"flag `--{flag}` comes from {seen[flag]} and {owner}")
+        seen[flag] = owner
+
+
 def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     # the command name comes from __name__, which partials and callable instances lack
     fn_name = getattr(fn, "__name__", None)
     if fn_name is None:
         raise TypeError(f"a command must be a named function, got {fn!r}")
     signature = inspect.signature(fn, eval_str=True)
-    summary, param_descriptions = parse_docstring(inspect.getdoc(fn) or "")
+    summary, descriptions = parse_docstring(inspect.getdoc(fn) or "")
+
     fields: dict[str, Any] = {}
+    flag_fields: dict[str, Any] = {}
+    flat: dict[str, frozenset[str]] = {}
+    model_params: dict[str, ModelParam] = {}
+    owners: list[tuple[str, str]] = []
     for param_name, param in signature.parameters.items():
-        default = ... if param.default is param.empty else param.default
-        # a `Field(...)` default holds the field's settings, as it does in a pydantic model
-        field = default if isinstance(default, FieldInfo) else Field(default)
         annotation = param.annotation
-        # Field(description=...) in the annotation or the default wins over the docstring
+        model_class = _model_class(annotation)
+        is_flat = _is_flat(annotation)
+        if is_flat and model_class is None:
+            raise TypeError(
+                f"Flat needs a pydantic model, got {get_args(annotation)[0]!r} for parameter '{param_name}'"
+            )
+
+        default = ... if param.default is param.empty else param.default
+        # a `Field(...)` default holds the field's settings
+        field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
+        declared = FieldInfo.from_annotated_attribute(annotation, field)
+        if _model_class(annotation, optional=True) is not None:
+            model_params[param_name] = ModelParam(
+                empty_when_unset=model_class is not None and declared.is_required(),
+                declared=declared,
+            )
+
         described = FieldInfo.from_annotation(annotation).description or field.description
-        if not described and param_name in param_descriptions:
-            annotation = Annotated[annotation, Field(description=param_descriptions[param_name])]
+        if not described and param_name in descriptions:
+            annotation = Annotated[annotation, Field(description=descriptions[param_name])]
         fields[param_name] = (annotation, field)
+
+        if model_class is None or not is_flat:
+            flag_fields[param_name] = fields[param_name]
+            owners.append((_kebab_case(_raw_key(declared, param_name)), f"`{param_name}`"))
+            continue
+        flag_fields.update(_flat_fields(param_name, model_class, model_params[param_name].instance))
+        keys = [_raw_key(info, name) for name, info in model_class.model_fields.items()]
+        owners.extend((_kebab_case(key), f"`{param_name}: Flat[{model_class.__name__}]`") for key in keys)
+        flat[param_name] = frozenset(keys)
+    _check_flag_names(owners)
+
     model = create_model(
         _pascal_case(fn_name),
         __base__=InputModel,
         __doc__=summary,
         **fields,
     )
+    flag_model = model
+    if flat:
+        flag_model = create_model(
+            _pascal_case(fn_name),
+            __base__=InputModel,
+            __doc__=summary,
+            **flag_fields,
+        )
     returns = Any if signature.return_annotation is signature.empty else signature.return_annotation
     return CommandSpec(
         name=_kebab_case(fn_name),
@@ -106,10 +245,13 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         output=TypeAdapter(returns),
         hints=hints,
         summary=summary,
+        model_params=model_params,
+        flag_model=flag_model,
+        flat=flat,
     )
 
 
-class _Parser(argparse.ArgumentParser):
+class Parser(argparse.ArgumentParser):
     """An ArgumentParser that raises its errors instead of printing usage and exiting."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -139,7 +281,7 @@ def _flags(parser: argparse.ArgumentParser) -> list[str]:
 
 
 @dataclass(frozen=True)
-class _Leaf:
+class Leaf:
     """What a run needs from the subparser argparse picked."""
 
     spec: CommandSpec
@@ -222,7 +364,7 @@ class App:
 
     def _parser(self) -> argparse.ArgumentParser:
         # allow_abbrev=False stops argparse expanding a prefix like --ti to --title
-        parser = _Parser(prog=self.name, description=self.description, allow_abbrev=False)
+        parser = Parser(prog=self.name, description=self.description, allow_abbrev=False)
         self._add_children(parser)
         return parser
 
@@ -254,8 +396,8 @@ class App:
                 description=child.summary,
                 allow_abbrev=False,
             )
-            source = CliSettingsSource(child.model, root_parser=subparser)
-            subparser.set_defaults(_leaf=_Leaf(child, source, _flags(subparser)))
+            source = CliSettingsSource(child.flag_model, root_parser=subparser)
+            subparser.set_defaults(_leaf=Leaf(child, source, _flags(subparser)))
 
     def __call__(self, argv: Sequence[str] | None = None) -> NoReturn:
         """Run the command named in argv (default `sys.argv[1:]`), print its result or error and exit."""
@@ -267,19 +409,37 @@ class App:
             print(output)
         raise SystemExit(ExitCode.OK)
 
+    @staticmethod
+    def _inputs(leaf: Leaf, parsed_args: argparse.Namespace) -> dict[str, Any]:
+        """The raw values from the flags, with the model parameter defaults applied."""
+        raw = leaf.source(parsed_args=parsed_args)()
+        fields = leaf.spec.model.model_fields
+        # pop all groups first: a Flat parameter may share its name with another Flat model's field
+        groups = {name: {key: raw.pop(key) for key in keys if key in raw} for name, keys in leaf.spec.flat.items()}
+        raw.update({_raw_key(fields[name], name): group for name, group in groups.items() if group})
+        for name, param in leaf.spec.model_params.items():
+            key = _raw_key(fields[name], name)
+            if key not in raw:
+                if param.empty_when_unset:
+                    raw[key] = {}
+            elif isinstance(raw[key], Mapping) and (base := param.base()) is not None:
+                raw[key] = _deep_merge(base, raw[key])
+        return raw
+
     def _run(self, argv: Sequence[str] | None) -> str | None:
         """The rendered result, or None when there is nothing to print."""
         parsed_args, leftovers = self._parser().parse_known_args(argv)
         if not hasattr(parsed_args, "_leaf"):
             raise InputRejected.command_not_found(parsed_args._level, list(parsed_args._choices))
-        leaf: _Leaf = parsed_args._leaf
+        leaf: Leaf = parsed_args._leaf
         spec = leaf.spec
+        flat = frozenset(spec.flat)
         try:
-            command_inputs = CliApp.run(spec.model, cli_args=parsed_args, cli_settings_source=leaf.source)
+            command_inputs = spec.model(**self._inputs(leaf, parsed_args))
         except (ValidationError, SettingsError) as error:
-            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error) from None
+            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error, flat) from None
         if leftovers:
-            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags)
+            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, flat=flat)
         result = spec.fn(**dict(command_inputs))
         if result is None:
             return None
