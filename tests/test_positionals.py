@@ -1,8 +1,8 @@
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
 from conftest import Run
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from argdantic import App, Arg
 
@@ -274,3 +274,37 @@ def test_positional_only_list_before_star_args_raises() -> None:
         @app.command
         def bad(paths: Arg[list[str]], /, *rest: str) -> None:
             pass
+
+
+def test_union_with_list_positional_must_be_last() -> None:
+    app = App("cli")
+
+    with pytest.raises(ValueError, match="'items'"):
+
+        @app.command
+        def pick(items: Arg[list[str] | str], name: Arg[str]) -> None:
+            pass
+
+
+@pytest.mark.parametrize("annotation", [tuple[int, int], tuple[int, ...], frozenset[int]])
+def test_collection_positional_pydantic_settings_cannot_fill_raises(annotation: Any) -> None:
+    app = App("cli")
+
+    def total(values: Arg[annotation]) -> None:
+        pass
+
+    with pytest.raises(TypeError, match="'values'"):
+        app.command(total)
+
+
+def test_aliased_positional_error_has_source_positional(run: Run) -> None:
+    app = App("cli")
+
+    @app.command
+    def repeat(times: Annotated[Arg[int], Field(alias="count")]) -> None:
+        pass
+
+    result = run(app, ["repeat", "many"])
+
+    error = result.json()["field_errors"][0]
+    assert (error["path"], error["source"]) == ("count", "positional")

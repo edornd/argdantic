@@ -104,7 +104,7 @@ class CommandSpec:
     Attributes:
         flag_model: the model that builds the parser, with Flat fields in place of their parameter.
         flat: each Flat parameter, with the raw keys of its fields.
-        positionals: the field names of the positionals, in signature order.
+        positionals: the raw keys of the positionals, in signature order.
         positional_only: the positional-only parameters, passed by place.
         var_positional: the `*args` parameter, passed unpacked.
     """
@@ -149,7 +149,18 @@ def _model_class(annotation: Any, *, optional: bool = False) -> type[BaseModel] 
 
 
 def _is_variadic(annotation: Any) -> bool:
-    """Whether a positional of this type takes many values: a collection, as pydantic-settings decides `nargs`."""
+    """
+    Whether pydantic-settings gives a positional of this type many values.
+
+    It does so when a list, set, dict, Sequence or Mapping appears anywhere in the type, unions included.
+    """
+    if get_origin(annotation) in (list, set, dict, Sequence, Mapping):
+        return True
+    return any(_is_variadic(arg) for arg in get_args(annotation))
+
+
+def _is_collection(annotation: Any) -> bool:
+    """Whether a value of this type holds many values, `X | None` included. `str` and `bytes` do not count."""
     annotation = _without_none(annotation)
     origin = get_origin(annotation) or annotation
     return isinstance(origin, type) and issubclass(origin, Collection) and not issubclass(origin, str | bytes)
@@ -248,8 +259,12 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
                 raise ValueError(
                     f"positional '{param_name}' follows the list positional '{variadic}', which must be the last one"
                 )
+            if not _is_variadic(declared.annotation) and _is_collection(declared.annotation):
+                # pydantic-settings gives it one value, so every run would fail
+                raise TypeError(f"a positional with many values must be a list, got parameter '{param_name}'")
             variadic = param_name if _is_variadic(declared.annotation) else None
-            positionals.append(param_name)
+            # pydantic's error loc names the alias
+            positionals.append(_raw_key(declared, param_name))
         if _model_class(annotation, optional=True) is not None:
             model_params[param_name] = ModelParam(
                 empty_when_unset=model_class is not None and declared.is_required(),
@@ -359,7 +374,8 @@ def _defer_missing_positionals(parser: argparse.ArgumentParser) -> None:
     Let pydantic report a missing positional as a `missing` field error.
 
     argparse checks only `required` before it rejects a missing positional, and only as text. The usage line comes
-    from `nargs`, so it stays correct. argparse then leaves the value unset, as for a missing required flag.
+    from `nargs`, so it stays correct. argparse then leaves the value unset, as for a missing required flag. argparse
+    has no public way to list the actions of a parser, so this reads its private `_actions`.
     """
     for action in parser._actions:
         if not action.option_strings:

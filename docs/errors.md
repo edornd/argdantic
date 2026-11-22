@@ -28,7 +28,7 @@ Each field error has these keys:
 | `expected` | string, optional | What the input should look like. |
 | `received` | any, optional | The value given. Omitted when the value is or holds a secret, see [Secrets](#secrets). |
 | `allowed` | list, optional | The accepted values: the choices of a `Literal` or an enum, the valid flags for an unknown flag, or the commands and groups for a command name. |
-| `source` | string, optional | Where the value came from: `flag` or `positional`. A `missing` error has none. |
+| `source` | string, optional | Where the value came from: `flag` or `positional`. Omitted for a missing parameter. |
 
 ## Rejected input
 
