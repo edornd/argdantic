@@ -129,6 +129,18 @@ class InputRejected(Exception):
         return cls(message, [field_error], code="COMMAND_NOT_FOUND")
 
     @classmethod
+    def missing_value(cls, path: str, flag: str) -> Self:
+        """A value flag given with no value, such as a bare `--title`."""
+        field_error = FieldError(
+            path=path,
+            code="missing_value",
+            message="a value is required",
+            received=flag,
+            source="flag",
+        )
+        return cls(f"{flag} needs a value", [field_error])
+
+    @classmethod
     def from_parse(
         cls,
         model: type[BaseModel],

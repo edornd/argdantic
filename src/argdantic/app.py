@@ -268,6 +268,17 @@ class Parser(argparse.ArgumentParser):
             raise InputRejected.command_not_found(self.prog, list(action.choices), value)
         super()._check_value(action, value)
 
+    def _match_argument(self, action: argparse.Action, arg_strings_pattern: str) -> int:
+        """Raise `missing_value` for a flag given without its value.
+
+        argparse calls this hook while parsing, once for each flag, to count its values. On its own it reports a
+        missing value only as text. A value flag has a single spelling, so `option_strings[0]` is the flag as typed.
+        """
+        try:
+            return super()._match_argument(action, arg_strings_pattern)
+        except argparse.ArgumentError:
+            raise InputRejected.missing_value(action.dest, action.option_strings[0]) from None
+
 
 def _flags(parser: argparse.ArgumentParser) -> list[str]:
     """Every flag spelling a leaf accepts, except help."""

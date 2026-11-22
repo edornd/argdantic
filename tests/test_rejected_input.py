@@ -12,7 +12,7 @@ from conftest import Run
 from pydantic import AfterValidator, BaseModel, Field, RootModel, Secret, SecretBytes, SecretStr, model_validator
 from typing_extensions import TypedDict
 
-from argdantic import App
+from argdantic import App, Flat
 
 NOTES_FLAGS = ["--title", "--priority", "--pinned", "--no-pinned"]
 
@@ -91,6 +91,18 @@ class Pin(Secret[int]):
 
 class Ports(RootModel[list[int]]):
     pass
+
+
+class Optim(BaseModel):
+    lr: float = 0.1
+
+
+class Train(BaseModel):
+    optim: Optim = Optim()
+
+
+class Steps(BaseModel):
+    max_steps: int = 10
 
 
 class Node(BaseModel):
@@ -264,15 +276,56 @@ def test_unknown_flags_come_before_validation_errors(notes_app: App, run: Run) -
 
 
 def test_argparse_usage_error_is_a_validation_error(notes_app: App, calls: list[str], run: Run) -> None:
-    result = run(notes_app, ["add", "--title"])
+    result = run(notes_app, ["add", "--pinned=yes"])
 
     assert result.code == 2
     assert calls == []
     assert result.err == ""
     assert result.json() == {
         "code": "VALIDATION_ERROR",
-        "message": "argument --title: expected one argument",
+        "message": "argument --pinned/--no-pinned: ignored explicit argument 'yes'",
         "retryable": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("argv", "flag", "path"),
+    [
+        (["--title"], "--title", "title"),
+        (["--title", "--verbose"], "--title", "title"),
+        (["--tags"], "--tags", "tags"),
+        (["--cfg.optim.lr"], "--cfg.optim.lr", "cfg.optim.lr"),
+        (["--max-steps"], "--max-steps", "max_steps"),
+    ],
+)
+def test_flag_without_value_is_a_missing_value(argv: list[str], flag: str, path: str, run: Run) -> None:
+    app = App("cli")
+
+    @app.command
+    def train(
+        cfg: Train,
+        steps: Flat[Steps],
+        title: str = "",
+        tags: list[str] | None = None,
+        verbose: bool = False,
+    ) -> None: ...
+
+    result = run(app, ["train", *argv])
+
+    assert result.code == 2
+    assert result.json() == {
+        "code": "VALIDATION_ERROR",
+        "message": f"{flag} needs a value",
+        "retryable": False,
+        "field_errors": [
+            {
+                "path": path,
+                "code": "missing_value",
+                "message": "a value is required",
+                "received": flag,
+                "source": "flag",
+            }
+        ],
     }
 
 
