@@ -5,7 +5,8 @@ _PARAM_LINE = re.compile(r"^(\*{0,2}\w+)(?:\s*\(.*\))?:\s*(.*)$")
 
 
 def parse_docstring(doc: str) -> tuple[str, dict[str, str]]:
-    """Split a Google-style docstring into its summary line and its `Args:` descriptions.
+    """
+    Split a Google-style docstring into its summary line and its `Args:` descriptions.
 
     Continuation lines of a parameter, indented deeper than its name, are joined to it with single spaces.
 

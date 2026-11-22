@@ -64,7 +64,8 @@ class SafetyHints:
 
 @dataclass(frozen=True)
 class ModelParam:
-    """A parameter annotated with a pydantic model.
+    """
+    A parameter annotated with a pydantic model.
 
     Attributes:
         empty_when_unset: validate from `{}` when no flag is given, so errors keep their full path.
@@ -81,7 +82,8 @@ class ModelParam:
         return default if isinstance(default, BaseModel) else None
 
     def base(self) -> BaseModel | None:
-        """The default the flags update: the instance, or a new one from the factory.
+        """
+        The default the flags update: the instance, or a new one from the factory.
 
         None when the factory takes the validated data, because it can run only during validation.
         """
@@ -93,7 +95,8 @@ class ModelParam:
 
 @dataclass(frozen=True)
 class CommandSpec:
-    """Everything argdantic knows about one command, built once at registration.
+    """
+    Everything argdantic knows about one command, built once at registration.
 
     Attributes:
         flag_model: the model that builds the parser, with Flat fields in place of their parameter.
@@ -254,7 +257,8 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
 
 
 class Parser(argparse.ArgumentParser):
-    """An ArgumentParser that raises its errors instead of printing usage and exiting.
+    """
+    An ArgumentParser that raises its errors instead of printing usage and exiting.
 
     It keeps the paragraphs of a description, which argparse joins into one by default.
     """
@@ -267,7 +271,8 @@ class Parser(argparse.ArgumentParser):
         raise InputRejected(message)
 
     def _check_value(self, action: argparse.Action, value: Any) -> None:
-        """Raise COMMAND_NOT_FOUND for an unknown command.
+        """
+        Raise COMMAND_NOT_FOUND for an unknown command.
 
         argparse calls this hook for each value it checks against choices. On its own it reports an unknown command
         only as text.
@@ -277,7 +282,8 @@ class Parser(argparse.ArgumentParser):
         super()._check_value(action, value)
 
     def _match_argument(self, action: argparse.Action, arg_strings_pattern: str) -> int:
-        """Raise `missing_value` for a flag given without its value.
+        """
+        Raise `missing_value` for a flag given without its value.
 
         argparse calls this hook while parsing, once for each flag, to count its values. On its own it reports a
         missing value only as text. A value flag has a single spelling, so `option_strings[0]` is the flag as typed.
@@ -289,7 +295,8 @@ class Parser(argparse.ArgumentParser):
 
 
 def _flags(parser: argparse.ArgumentParser) -> list[str]:
-    """Every flag spelling a leaf accepts, except help.
+    """
+    Every flag spelling a leaf accepts, except help.
 
     argparse has no public way to list the flags of a parser, so this reads its private `_actions`.
     """
@@ -311,7 +318,8 @@ class Leaf:
 
 
 class App:
-    """A CLI: a named tree of commands that runs from an argv list.
+    """
+    A CLI: a named tree of commands that runs from an argv list.
 
     Args:
         name: the program name in usage lines and errors. For a mounted App, also the token that selects it on the
@@ -390,7 +398,8 @@ class App:
         return parser
 
     def _add_children(self, parser: argparse.ArgumentParser) -> None:
-        """Add a subparser for each child, recursively for groups.
+        """
+        Add a subparser for each child, recursively for groups.
 
         Each group on the path overwrites `_level` and `_choices`, so a missing command is reported at the deepest
         group. `_choices` is a tuple, because pydantic-settings parses every list in argparse's result as input. The

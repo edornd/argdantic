@@ -70,7 +70,8 @@ class ErrorReport(BaseModel):
 
 
 class CommandError(Exception):
-    """A failure the command reports on purpose, rendered with its own code instead of UNKNOWN.
+    """
+    A failure the command reports on purpose, rendered with its own code instead of UNKNOWN.
 
     Args:
         code: a stable SCREAMING_CASE name that programs match on.
@@ -149,7 +150,8 @@ class InputRejected(Exception):
         error: ValidationError | SettingsError | None = None,
         flat: frozenset[str] = frozenset(),
     ) -> Self:
-        """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors.
+        """
+        Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors.
 
         Args:
             flat: the Flat parameters, whose name the error paths leave out.
@@ -197,7 +199,8 @@ def _dotted(loc: tuple[int | str, ...]) -> str:
 
 
 def _bare(annotation: Any) -> Any:
-    """The type an annotation names, without `Annotated`, type aliases, qualifiers or a root model wrapper.
+    """
+    The type an annotation names, without `Annotated`, type aliases, qualifiers or a root model wrapper.
 
     A root model is unwrapped, because `loc` skips `root`.
     """
@@ -209,7 +212,8 @@ def _bare(annotation: Any) -> Any:
 
 
 def _annotations_at(annotation: Any, loc: tuple[int | str, ...]) -> list[Any]:
-    """Every annotation the input at `loc` can have. None marks a step the walk can't follow: callers hide it.
+    """
+    Every annotation the input at `loc` can have. None marks a step the walk can't follow: callers hide it.
 
     `X | None` puts no member tag in `loc`. Other unions put a member tag first: the class name of a model, or a
     name only pydantic-core knows, such as a discriminator value or `list[int]`. A tag that names no member makes
@@ -302,7 +306,8 @@ def _looks_like_flag(token: str) -> bool:
 
 
 def _leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldError]:
-    """Field errors for the tokens argparse could not place.
+    """
+    Field errors for the tokens argparse could not place.
 
     A non-flag token right after an unknown flag is taken as that flag's value and not reported again.
     """
@@ -338,7 +343,8 @@ def _leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldErr
 
 
 def fail(error: Exception) -> NoReturn:
-    """Print the error object for `error` on stdout and exit with its code.
+    """
+    Print the error object for `error` on stdout and exit with its code.
 
     `InputRejected` and `CommandError` carry their own report. Anything else is UNKNOWN, and its traceback goes to
     stderr when ARGD_DEBUG is on.
