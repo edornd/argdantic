@@ -2,7 +2,7 @@ import argparse
 import inspect
 import json
 import types
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Annotated, Any, NoReturn, TypeVar, Union, get_args, get_origin, overload
 
@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError, create_mode
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
+    CliPositionalArg,
     CliSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
@@ -28,6 +29,8 @@ class FlatMarker:
 
 
 Flat = Annotated[T, FlatMarker()]
+Arg = CliPositionalArg
+_POSITIONAL = CliPositionalArg.__metadata__[0]
 
 
 class InputModel(BaseSettings):
@@ -101,6 +104,7 @@ class CommandSpec:
     Attributes:
         flag_model: the model that builds the parser, with Flat fields in place of their parameter.
         flat: each Flat parameter, with the raw keys of its fields.
+        positionals: the field names of the positionals, in signature order.
     """
 
     name: str
@@ -112,6 +116,7 @@ class CommandSpec:
     model_params: dict[str, ModelParam]
     flag_model: type[InputModel]
     flat: dict[str, frozenset[str]]
+    positionals: tuple[str, ...]
 
 
 def _kebab_case(name: str) -> str:
@@ -122,14 +127,28 @@ def _pascal_case(name: str) -> str:
     return name.title().replace("_", "")
 
 
+def _without_none(annotation: Any) -> Any:
+    """`X` for `X | None`, any other annotation as it is."""
+    if get_origin(annotation) in (Union, types.UnionType):
+        members = [member for member in get_args(annotation) if member is not type(None)]
+        return members[0] if len(members) == 1 else annotation
+    return annotation
+
+
 def _model_class(annotation: Any, *, optional: bool = False) -> type[BaseModel] | None:
     """The pydantic model class an annotation names, through `Annotated` and, if `optional`, `X | None`, or None."""
     if get_origin(annotation) is Annotated:
         annotation = get_args(annotation)[0]
-    if optional and get_origin(annotation) in (Union, types.UnionType):
-        members = [member for member in get_args(annotation) if member is not type(None)]
-        annotation = members[0] if len(members) == 1 else None
+    if optional:
+        annotation = _without_none(annotation)
     return annotation if isinstance(annotation, type) and issubclass(annotation, BaseModel) else None
+
+
+def _is_variadic(annotation: Any) -> bool:
+    """Whether a positional of this type takes many values: a collection, as pydantic-settings decides `nargs`."""
+    annotation = _without_none(annotation)
+    origin = get_origin(annotation) or annotation
+    return isinstance(origin, type) and issubclass(origin, Collection) and not issubclass(origin, str | bytes)
 
 
 def _deep_merge(base: Mapping[str, Any] | BaseModel, update: Mapping[str, Any]) -> dict[str, Any]:
@@ -195,6 +214,8 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     flat: dict[str, frozenset[str]] = {}
     model_params: dict[str, ModelParam] = {}
     owners: list[tuple[str, str]] = []
+    positionals: list[str] = []
+    variadic: str | None = None
     for param_name, param in signature.parameters.items():
         annotation = param.annotation
         model_class = _model_class(annotation)
@@ -207,6 +228,15 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         default = ... if param.default is param.empty else param.default
         field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
         declared = FieldInfo.from_annotated_attribute(annotation, field)
+        if _POSITIONAL in declared.metadata:
+            if _model_class(annotation, optional=True) is not None:
+                raise TypeError(f"a positional cannot be a pydantic model, got parameter '{param_name}'")
+            if variadic is not None:
+                raise ValueError(
+                    f"positional '{param_name}' follows the list positional '{variadic}', which must be the last one"
+                )
+            variadic = param_name if _is_variadic(declared.annotation) else None
+            positionals.append(param_name)
         if _model_class(annotation, optional=True) is not None:
             model_params[param_name] = ModelParam(
                 empty_when_unset=model_class is not None and declared.is_required(),
@@ -253,6 +283,7 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         model_params=model_params,
         flag_model=flag_model,
         flat=flat,
+        positionals=tuple(positionals),
     )
 
 
@@ -306,6 +337,18 @@ def _flags(parser: argparse.ArgumentParser) -> list[str]:
         if not isinstance(action, argparse._HelpAction)
         for option in action.option_strings
     ]
+
+
+def _defer_missing_positionals(parser: argparse.ArgumentParser) -> None:
+    """
+    Let pydantic report a missing positional as a `missing` field error.
+
+    argparse checks only `required` before it rejects a missing positional, and only as text. The usage line comes
+    from `nargs`, so it stays correct. argparse then leaves the value unset, as for a missing required flag.
+    """
+    for action in parser._actions:
+        if not action.option_strings:
+            action.required = False
 
 
 @dataclass(frozen=True)
@@ -430,6 +473,7 @@ class App:
                 allow_abbrev=False,
             )
             source = CliSettingsSource(child.flag_model, root_parser=subparser)
+            _defer_missing_positionals(subparser)
             subparser.set_defaults(_leaf=Leaf(child, source, _flags(subparser)))
 
     def __call__(self, argv: Sequence[str] | None = None) -> NoReturn:
@@ -466,13 +510,13 @@ class App:
             raise InputRejected.command_not_found(parsed_args._level, list(parsed_args._choices))
         leaf: Leaf = parsed_args._leaf
         spec = leaf.spec
-        flat = frozenset(spec.flat)
+        flat, positionals = frozenset(spec.flat), frozenset(spec.positionals)
         try:
             command_inputs = spec.model(**self._inputs(leaf, parsed_args))
         except (ValidationError, SettingsError) as error:
-            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error, flat) from None
+            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error, flat, positionals) from None
         if leftovers:
-            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, flat=flat)
+            raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, flat=flat, positionals=positionals)
         result = spec.fn(**dict(command_inputs))
         if result is None:
             return None
