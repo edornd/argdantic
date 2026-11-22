@@ -203,6 +203,20 @@ def test_annotated_default_factory_is_used(run: Run) -> None:
     assert result.json() == {"size": 2, "epochs": 3}
 
 
+def test_validated_data_factory_takes_flags_and_runs_without_them(run: Run) -> None:
+    app = App("ml")
+
+    @app.command
+    def train(
+        size: int,
+        cfg: Annotated[Sized, Field(default_factory=lambda data: Sized(size=data["size"]))],
+    ) -> Sized:
+        return cfg
+
+    assert run(app, ["train", "--size", "4", "--cfg.size", "2"]).json() == {"size": 2, "epochs": 3}
+    assert run(app, ["train", "--size", "4"]).json() == {"size": 4, "epochs": 3}
+
+
 def test_default_instance_merge_ignores_serialization_settings(run: Run) -> None:
     app = App("ml")
 
