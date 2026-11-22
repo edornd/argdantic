@@ -105,6 +105,8 @@ class CommandSpec:
         flag_model: the model that builds the parser, with Flat fields in place of their parameter.
         flat: each Flat parameter, with the raw keys of its fields.
         positionals: the field names of the positionals, in signature order.
+        positional_only: the positional-only parameters, passed by place.
+        var_positional: the `*args` parameter, passed unpacked.
     """
 
     name: str
@@ -117,6 +119,8 @@ class CommandSpec:
     flag_model: type[InputModel]
     flat: dict[str, frozenset[str]]
     positionals: tuple[str, ...]
+    positional_only: tuple[str, ...]
+    var_positional: str | None
 
 
 def _kebab_case(name: str) -> str:
@@ -193,6 +197,15 @@ def _flat_fields(
     return fields
 
 
+def _annotation(param: inspect.Parameter) -> Any:
+    """The parameter's annotation, with a positional-only parameter as `Arg[T]` and `*args: T` as `Arg[list[T]]`."""
+    if param.kind is param.POSITIONAL_ONLY:
+        return Arg[param.annotation]
+    if param.kind is param.VAR_POSITIONAL:
+        return Arg[list[param.annotation]]
+    return param.annotation
+
+
 def _check_flag_names(owners: list[tuple[str, str]]) -> None:
     """Raise when two parameters or Flat fields give the same top-level flag."""
     seen: dict[str, str] = {}
@@ -217,7 +230,7 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     positionals: list[str] = []
     variadic: str | None = None
     for param_name, param in signature.parameters.items():
-        annotation = param.annotation
+        annotation = _annotation(param)
         model_class = _model_class(annotation)
         is_flat = _is_flat(annotation)
         if is_flat and model_class is None:
@@ -284,6 +297,8 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         flag_model=flag_model,
         flat=flat,
         positionals=tuple(positionals),
+        positional_only=tuple(name for name, p in signature.parameters.items() if p.kind is p.POSITIONAL_ONLY),
+        var_positional=next((name for name, p in signature.parameters.items() if p.kind is p.VAR_POSITIONAL), None),
     )
 
 
@@ -517,7 +532,10 @@ class App:
             raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, error, flat, positionals) from None
         if leftovers:
             raise InputRejected.from_parse(spec.model, leftovers, leaf.flags, flat=flat, positionals=positionals)
-        result = spec.fn(**dict(command_inputs))
+        by_keyword = dict(command_inputs)
+        by_place = [by_keyword.pop(name) for name in spec.positional_only]
+        unpacked = by_keyword.pop(spec.var_positional) if spec.var_positional else []
+        result = spec.fn(*by_place, *unpacked, **by_keyword)
         if result is None:
             return None
         return json.dumps(spec.output.dump_python(result, mode="json"))
