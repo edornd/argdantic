@@ -162,7 +162,7 @@ class InputRejected(Exception):
 
 def _field_error(model: type[BaseModel], error: ErrorDetails, flat: frozenset[str]) -> FieldError:
     loc = error["loc"]
-    # a Flat parameter has no flag of its own, so the path starts at its model's field
+    # a Flat parameter has no flag, so the path starts at its field
     path = _dotted(loc[1:] if loc and loc[0] in flat else loc)
     if error["type"] == "missing":
         # `input` holds the whole parent input here, not a value for this field
