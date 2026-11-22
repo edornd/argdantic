@@ -251,7 +251,7 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     )
 
 
-class _Parser(argparse.ArgumentParser):
+class Parser(argparse.ArgumentParser):
     """An ArgumentParser that raises its errors instead of printing usage and exiting."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -281,7 +281,7 @@ def _flags(parser: argparse.ArgumentParser) -> list[str]:
 
 
 @dataclass(frozen=True)
-class _Leaf:
+class Leaf:
     """What a run needs from the subparser argparse picked."""
 
     spec: CommandSpec
@@ -364,7 +364,7 @@ class App:
 
     def _parser(self) -> argparse.ArgumentParser:
         # allow_abbrev=False stops argparse expanding a prefix like --ti to --title
-        parser = _Parser(prog=self.name, description=self.description, allow_abbrev=False)
+        parser = Parser(prog=self.name, description=self.description, allow_abbrev=False)
         self._add_children(parser)
         return parser
 
@@ -397,7 +397,7 @@ class App:
                 allow_abbrev=False,
             )
             source = CliSettingsSource(child.flag_model, root_parser=subparser)
-            subparser.set_defaults(_leaf=_Leaf(child, source, _flags(subparser)))
+            subparser.set_defaults(_leaf=Leaf(child, source, _flags(subparser)))
 
     def __call__(self, argv: Sequence[str] | None = None) -> NoReturn:
         """Run the command named in argv (default `sys.argv[1:]`), print its result or error and exit."""
@@ -410,7 +410,7 @@ class App:
         raise SystemExit(ExitCode.OK)
 
     @staticmethod
-    def _inputs(leaf: _Leaf, parsed_args: argparse.Namespace) -> dict[str, Any]:
+    def _inputs(leaf: Leaf, parsed_args: argparse.Namespace) -> dict[str, Any]:
         """The raw values from the flags, with the model parameter defaults applied."""
         raw = leaf.source(parsed_args=parsed_args)()
         fields = leaf.spec.model.model_fields
@@ -431,7 +431,7 @@ class App:
         parsed_args, leftovers = self._parser().parse_known_args(argv)
         if not hasattr(parsed_args, "_leaf"):
             raise InputRejected.command_not_found(parsed_args._level, list(parsed_args._choices))
-        leaf: _Leaf = parsed_args._leaf
+        leaf: Leaf = parsed_args._leaf
         spec = leaf.spec
         flat = frozenset(spec.flat)
         try:
