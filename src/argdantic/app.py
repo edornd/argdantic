@@ -48,7 +48,7 @@ class InputModel(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # no env input, only flags and defaults
+        """Read only flags and defaults, never the environment."""
         return (init_settings,)
 
 
@@ -64,7 +64,8 @@ class SafetyHints:
 
 @dataclass(frozen=True)
 class ModelParam:
-    """A parameter annotated with a pydantic model.
+    """
+    A parameter annotated with a pydantic model.
 
     Attributes:
         empty_when_unset: validate from `{}` when no flag is given, so errors keep their full path.
@@ -81,8 +82,11 @@ class ModelParam:
         return default if isinstance(default, BaseModel) else None
 
     def base(self) -> BaseModel | None:
-        """The default the flags update: the instance, or a new one from the factory."""
-        # this factory can only run during validation
+        """
+        The default the flags update: the instance, or a new one from the factory.
+
+        None when the factory takes the validated data, because it can run only during validation.
+        """
         if self.declared.default_factory_takes_validated_data:
             return None
         default = self.declared.get_default(call_default_factory=True)
@@ -91,7 +95,13 @@ class ModelParam:
 
 @dataclass(frozen=True)
 class CommandSpec:
-    """Everything argdantic knows about one command, built once at registration."""
+    """
+    Everything argdantic knows about one command, built once at registration.
+
+    Attributes:
+        flag_model: the model that builds the parser, with Flat fields in place of their parameter.
+        flat: each Flat parameter, with the raw keys of its fields.
+    """
 
     name: str
     fn: Callable[..., Any]
@@ -100,9 +110,7 @@ class CommandSpec:
     hints: SafetyHints
     summary: str
     model_params: dict[str, ModelParam]
-    # builds the parser, with Flat fields in place of their parameter
     flag_model: type[InputModel]
-    # each Flat parameter, with its fields' raw keys
     flat: dict[str, frozenset[str]]
 
 
@@ -127,7 +135,7 @@ def _model_class(annotation: Any, *, optional: bool = False) -> type[BaseModel] 
 def _deep_merge(base: Mapping[str, Any] | BaseModel, update: Mapping[str, Any]) -> dict[str, Any]:
     """A new dict: a mapping in `update` merges into a mapping or model in `base`, any other value replaces."""
     if isinstance(base, BaseModel):
-        # by attribute, so serialization settings play no part
+        # read attributes, not model_dump, so serialization settings do not change the values
         base = {_raw_key(info, name): getattr(base, name) for name, info in type(base).model_fields.items()}
     merged = dict(base)
     for key, value in update.items():
@@ -154,7 +162,6 @@ def _flat_fields(
     """The flag model's fields for a Flat parameter, keyed `<param>__<field>`, with the defaults the run uses."""
     fields = {}
     for name, info in model_class.model_fields.items():
-        # the flag comes from the alias, the raw key from the validation alias
         key = _raw_key(info, name)
         field = FieldInfo.from_field(
             info.default if instance is None else getattr(instance, name),
@@ -177,7 +184,6 @@ def _check_flag_names(owners: list[tuple[str, str]]) -> None:
 
 
 def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
-    # the command name comes from __name__, which partials and callable instances lack
     fn_name = getattr(fn, "__name__", None)
     if fn_name is None:
         raise TypeError(f"a command must be a named function, got {fn!r}")
@@ -199,7 +205,6 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
             )
 
         default = ... if param.default is param.empty else param.default
-        # a `Field(...)` default holds the field's settings
         field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
         declared = FieldInfo.from_annotated_attribute(annotation, field)
         if _model_class(annotation, optional=True) is not None:
@@ -252,10 +257,13 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
 
 
 class Parser(argparse.ArgumentParser):
-    """An ArgumentParser that raises its errors instead of printing usage and exiting."""
+    """
+    An ArgumentParser that raises its errors instead of printing usage and exiting.
+
+    It keeps the paragraphs of a description, which argparse joins into one by default.
+    """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        # argparse joins the paragraphs of a description into one by default
         kwargs.setdefault("formatter_class", argparse.RawDescriptionHelpFormatter)
         super().__init__(*args, **kwargs)
 
@@ -263,13 +271,19 @@ class Parser(argparse.ArgumentParser):
         raise InputRejected(message)
 
     def _check_value(self, action: argparse.Action, value: Any) -> None:
-        # argparse reports an unknown command only as text, so raise the structured error before it does
+        """
+        Raise COMMAND_NOT_FOUND for an unknown command.
+
+        argparse calls this hook for each value it checks against choices. On its own it reports an unknown command
+        only as text.
+        """
         if isinstance(action, argparse._SubParsersAction) and value not in action.choices:
             raise InputRejected.command_not_found(self.prog, list(action.choices), value)
         super()._check_value(action, value)
 
     def _match_argument(self, action: argparse.Action, arg_strings_pattern: str) -> int:
-        """Raise `missing_value` for a flag given without its value.
+        """
+        Raise `missing_value` for a flag given without its value.
 
         argparse calls this hook while parsing, once for each flag, to count its values. On its own it reports a
         missing value only as text. A value flag has a single spelling, so `option_strings[0]` is the flag as typed.
@@ -281,8 +295,11 @@ class Parser(argparse.ArgumentParser):
 
 
 def _flags(parser: argparse.ArgumentParser) -> list[str]:
-    """Every flag spelling a leaf accepts, except help."""
-    # argparse has no public way to list a parser's flags
+    """
+    Every flag spelling a leaf accepts, except help.
+
+    argparse has no public way to list the flags of a parser, so this reads its private `_actions`.
+    """
     return [
         option
         for action in parser._actions
@@ -301,17 +318,18 @@ class Leaf:
 
 
 class App:
-    """A CLI: a named tree of commands that runs from an argv list.
+    """
+    A CLI: a named tree of commands that runs from an argv list.
 
     Args:
         name: the program name in usage lines and errors. For a mounted App, also the token that selects it on the
             command line.
-        description: the help text. Its first line is the summary in the parent's `--help`.
+        description: the help text, printed as written after the common indentation is removed. Its first line is
+            the summary in the parent's `--help`.
     """
 
     def __init__(self, name: str, *, description: str | None = None) -> None:
         self.name = name
-        # help prints the description as written, so a triple-quoted one loses its indentation here
         self.description = inspect.cleandoc(description) if description else None
         self._children: dict[str, CommandSpec | App] = {}
 
@@ -374,21 +392,25 @@ class App:
         return parse_docstring(self.description or "")[0]
 
     def _parser(self) -> argparse.ArgumentParser:
-        # allow_abbrev=False stops argparse expanding a prefix like --ti to --title
+        # stop argparse from expanding a prefix such as --ti to --title
         parser = Parser(prog=self.name, description=self.description, allow_abbrev=False)
         self._add_children(parser)
         return parser
 
     def _add_children(self, parser: argparse.ArgumentParser) -> None:
-        # each group on the path overwrites these, so a missing command is reported at the deepest one. A tuple,
-        # because pydantic-settings parses every list in argparse's result as input
+        """
+        Add a subparser for each child, recursively for groups.
+
+        Each group on the path overwrites `_level` and `_choices`, so a missing command is reported at the deepest
+        group. `_choices` is a tuple, because pydantic-settings parses every list in argparse's result as input. The
+        subparsers are not `required=True`, or argparse would reject a missing command with its own text.
+        """
         parser.set_defaults(_level=parser.prog, _choices=tuple(self._children))
-        # not required=True: argparse would then reject a missing command with its own text, not COMMAND_NOT_FOUND
         subparsers = parser.add_subparsers(dest="_command_name")
         for name, child in self._children.items():
-            # argparse 3.14.0 builds a default prog with colour codes, and error messages print the prog
+            # argparse 3.14.0 puts colour codes in a default prog, and error messages show the prog
             prog = f"{parser.prog} {name}"
-            # argparse %-formats help text, so a literal % is doubled
+            # argparse applies % formatting to help text, so double each literal %
             summary = (child._summary if isinstance(child, App) else child.summary).replace("%", "%%")
             if isinstance(child, App):
                 subparser = subparsers.add_parser(
@@ -425,7 +447,7 @@ class App:
         """The raw values from the flags, with the model parameter defaults applied."""
         raw = leaf.source(parsed_args=parsed_args)()
         fields = leaf.spec.model.model_fields
-        # pop all groups first: a Flat parameter may share its name with another Flat model's field
+        # pop all groups first, because a Flat parameter can have the name of a field in another Flat model
         groups = {name: {key: raw.pop(key) for key in keys if key in raw} for name, keys in leaf.spec.flat.items()}
         raw.update({_raw_key(fields[name], name): group for name, group in groups.items() if group})
         for name, param in leaf.spec.model_params.items():

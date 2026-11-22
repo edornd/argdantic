@@ -70,7 +70,8 @@ class ErrorReport(BaseModel):
 
 
 class CommandError(Exception):
-    """A failure the command reports on purpose, rendered with its own code instead of UNKNOWN.
+    """
+    A failure the command reports on purpose, rendered with its own code instead of UNKNOWN.
 
     Args:
         code: a stable SCREAMING_CASE name that programs match on.
@@ -149,14 +150,15 @@ class InputRejected(Exception):
         error: ValidationError | SettingsError | None = None,
         flat: frozenset[str] = frozenset(),
     ) -> Self:
-        """Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors.
+        """
+        Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors.
 
         Args:
             flat: the Flat parameters, whose name the error paths leave out.
         """
         field_errors = _leftover_errors(leftovers, valid_flags)
         if isinstance(error, SettingsError):
-            # malformed JSON in a structured flag, pydantic-settings names the field only in its message
+            # pydantic-settings names the field only in the message of a malformed JSON value
             return cls(str(error), field_errors)
         if error is not None:
             field_errors += [_field_error(model, item, flat) for item in error.errors()]
@@ -174,13 +176,11 @@ class InputRejected(Exception):
 
 def _field_error(model: type[BaseModel], error: ErrorDetails, flat: frozenset[str]) -> FieldError:
     loc = error["loc"]
-    # a Flat parameter has no flag, so the path starts at its field
     path = _dotted(loc[1:] if loc and loc[0] in flat else loc)
     if error["type"] == "missing":
-        # `input` holds the whole parent input here, not a value for this field
+        # here input is the full parent input, not a value for this field
         return FieldError(path=path, code="missing", message=error["msg"])
     annotations = _annotations_at(model, loc)
-    # an unresolved path counts as secret, so a type the walk does not understand can't leak its value
     hidden = any(annotation is None or _holds_secret(annotation) for annotation in annotations)
     allowed = [choice for annotation in annotations if annotation is not None for choice in _choices(annotation)]
     return FieldError(
@@ -199,27 +199,33 @@ def _dotted(loc: tuple[int | str, ...]) -> str:
 
 
 def _bare(annotation: Any) -> Any:
-    """The type an annotation names, without `Annotated`, type aliases, qualifiers or a root model wrapper."""
+    """
+    The type an annotation names, without `Annotated`, type aliases, qualifiers or a root model wrapper.
+
+    A root model is unwrapped, because `loc` skips `root`.
+    """
     inspected = inspect_annotation(annotation, annotation_source=AnnotationSource.ANY, unpack_type_aliases="eager")
     annotation = inspected.type
     if isinstance(annotation, type) and issubclass(annotation, RootModel):
-        # a root model's `loc` skips `root`
         return _bare(annotation.model_fields["root"].annotation)
     return annotation
 
 
 def _annotations_at(annotation: Any, loc: tuple[int | str, ...]) -> list[Any]:
-    """Every annotation the input at `loc` can have. None marks a step the walk can't follow: callers hide it."""
+    """
+    Every annotation the input at `loc` can have. None marks a step the walk can't follow: callers hide it.
+
+    `X | None` puts no member tag in `loc`. Other unions put a member tag first: the class name of a model, or a
+    name only pydantic-core knows, such as a discriminator value or `list[int]`. A tag that names no member makes
+    the walk follow every member.
+    """
     annotation = _bare(annotation)
     origin, args = get_origin(annotation), get_args(annotation)
     if is_union_origin(origin):
         members = [member for member in args if member is not NoneType]
         if len(members) == 1:
-            # `X | None` puts no member tag in `loc`
             return _annotations_at(members[0], loc)
         if loc:
-            # other unions put a member tag first: a model's class name, or a name only pydantic-core knows (a
-            # discriminator value, `list[int]`). A tag that names no member makes the walk follow every member.
             named = [member for member in members if getattr(_bare(member), "__name__", None) == loc[0]]
             return [found for member in named or members for found in _annotations_at(member, loc[1:])]
     if not loc:
@@ -244,7 +250,7 @@ def _fields(annotation: Any) -> dict[int | str, Any] | None:
     """The annotation behind each key `loc` can use in a model, dataclass, TypedDict or NamedTuple; None otherwise."""
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         by_name: dict[int | str, Any] = {name: field.annotation for name, field in annotation.model_fields.items()}
-        # pydantic reports the alias, so an alias beats a field of the same name
+        # pydantic reports the alias, so an alias wins over a field with the same name
         return by_name | {
             field.validation_alias: field.annotation
             for field in annotation.model_fields.values()
@@ -254,7 +260,7 @@ def _fields(annotation: Any) -> dict[int | str, Any] | None:
         return {**typing.get_type_hints(annotation, include_extras=True)}
     if typing_objects.is_namedtuple(annotation):
         hints: dict[int | str, Any] = {**typing.get_type_hints(annotation, include_extras=True)}
-        # `loc` names a NamedTuple field by name or by position, depending on the input
+        # loc names a NamedTuple field by name or by position, as the input does
         return hints | dict(enumerate(hints.values()))
     return None
 
@@ -275,15 +281,15 @@ def _choices(annotation: Any) -> list[Any]:
 def _holds_secret(annotation: Any, seen: frozenset[int] = frozenset()) -> bool:
     """Whether a value of this type is or contains a secret, since an error on a container echoes all of it."""
     if id(annotation) in seen:
-        # a recursive type: the outer call already checks everything it holds
+        # a recursive type: the outer call checks all that it holds
         return False
     seen |= {id(annotation)}
     annotation = _bare(annotation)
     if typing_objects.is_literal(get_origin(annotation)):
-        # its arguments are values, and a string value is not a forward reference
+        # the arguments are values, and a string value is not a forward reference
         return False
     if isinstance(annotation, str | ForwardRef) or typing_objects.is_typealiastype(annotation):
-        # a forward reference the walk can't evaluate could name a secret
+        # the walk cannot evaluate this forward reference, and it can name a secret
         return True
     if isinstance(annotation, type) and issubclass(annotation, SecretStr | SecretBytes | Secret):
         return True
@@ -295,12 +301,13 @@ def _holds_secret(annotation: Any, seen: frozenset[int] = frozenset()) -> bool:
 
 
 def _looks_like_flag(token: str) -> bool:
-    # "-1" and "-.5" are numbers, "-" means stdin and "--" ends the flags
+    """Whether a token is a flag. "-1" and "-.5" are numbers, "-" means stdin and "--" ends the flags."""
     return token.startswith("-") and token not in ("-", "--") and not _NEGATIVE_NUMBER.match(token)
 
 
 def _leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldError]:
-    """Field errors for the tokens argparse could not place.
+    """
+    Field errors for the tokens argparse could not place.
 
     A non-flag token right after an unknown flag is taken as that flag's value and not reported again.
     """
@@ -336,7 +343,8 @@ def _leftover_errors(tokens: list[str], valid_flags: list[str]) -> list[FieldErr
 
 
 def fail(error: Exception) -> NoReturn:
-    """Print the error object for `error` on stdout and exit with its code.
+    """
+    Print the error object for `error` on stdout and exit with its code.
 
     `InputRejected` and `CommandError` carry their own report. Anything else is UNKNOWN, and its traceback goes to
     stderr when ARGD_DEBUG is on.
@@ -354,7 +362,7 @@ def fail(error: Exception) -> NoReturn:
 
 
 def _debug_enabled() -> bool:
-    # an unparseable value counts as off
+    """Whether ARGD_DEBUG is on. A value that does not parse as a bool counts as off."""
     try:
         return TypeAdapter(bool).validate_python(os.environ.get("ARGD_DEBUG", ""))
     except ValidationError:
