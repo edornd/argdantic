@@ -176,64 +176,6 @@ def _check_flag_names(owners: list[tuple[str, str]]) -> None:
         seen[flag] = owner
 
 
-def _input_fields(
-    signature: inspect.Signature,
-    descriptions: dict[str, str],
-) -> dict[str, Any]:
-    """One input model field per parameter, described by its docstring unless a Field describes it."""
-    fields = {}
-    for name, param in signature.parameters.items():
-        default = ... if param.default is param.empty else param.default
-        # a `Field(...)` default holds the field's settings
-        field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
-        annotation = param.annotation
-        described = FieldInfo.from_annotation(annotation).description or field.description
-        if not described and name in descriptions:
-            annotation = Annotated[annotation, Field(description=descriptions[name])]
-        fields[name] = (annotation, field)
-    return fields
-
-
-def _model_params(fields: dict[str, Any]) -> dict[str, ModelParam]:
-    """The parameters annotated with a pydantic model, or an optional one."""
-    params = {}
-    for name, (annotation, field) in fields.items():
-        if _model_class(annotation, optional=True) is not None:
-            declared = FieldInfo.from_annotated_attribute(annotation, field)
-            params[name] = ModelParam(
-                empty_when_unset=_model_class(annotation) is not None and declared.is_required(),
-                declared=declared,
-            )
-    return params
-
-
-def _flag_fields(
-    fields: dict[str, Any],
-    model_params: dict[str, ModelParam],
-) -> tuple[dict[str, Any], dict[str, frozenset[str]]]:
-    """The flag model's fields, and the raw keys of each Flat parameter."""
-    flag_fields = {}
-    flat = {}
-    owners = []
-    for param_name, (annotation, field) in fields.items():
-        model_class = _model_class(annotation)
-        if not _is_flat(annotation):
-            flag_fields[param_name] = (annotation, field)
-            key = _raw_key(FieldInfo.from_annotated_attribute(annotation, field), param_name)
-            owners.append((_kebab_case(key), f"`{param_name}`"))
-            continue
-        if model_class is None:
-            raise TypeError(
-                f"Flat needs a pydantic model, got {get_args(annotation)[0]!r} for parameter '{param_name}'"
-            )
-        flag_fields.update(_flat_fields(param_name, model_class, model_params[param_name].instance))
-        keys = [_raw_key(info, name) for name, info in model_class.model_fields.items()]
-        owners.extend((_kebab_case(key), f"`{param_name}: Flat[{model_class.__name__}]`") for key in keys)
-        flat[param_name] = frozenset(keys)
-    _check_flag_names(owners)
-    return flag_fields, flat
-
-
 def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
     # the command name comes from __name__, which partials and callable instances lack
     fn_name = getattr(fn, "__name__", None)
@@ -241,9 +183,46 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         raise TypeError(f"a command must be a named function, got {fn!r}")
     signature = inspect.signature(fn, eval_str=True)
     summary, descriptions = parse_docstring(inspect.getdoc(fn) or "")
-    fields = _input_fields(signature, descriptions)
-    model_params = _model_params(fields)
-    flag_fields, flat = _flag_fields(fields, model_params)
+
+    fields: dict[str, Any] = {}
+    flag_fields: dict[str, Any] = {}
+    flat: dict[str, frozenset[str]] = {}
+    model_params: dict[str, ModelParam] = {}
+    owners: list[tuple[str, str]] = []
+    for param_name, param in signature.parameters.items():
+        annotation = param.annotation
+        model_class = _model_class(annotation)
+        is_flat = _is_flat(annotation)
+        if is_flat and model_class is None:
+            raise TypeError(
+                f"Flat needs a pydantic model, got {get_args(annotation)[0]!r} for parameter '{param_name}'"
+            )
+
+        default = ... if param.default is param.empty else param.default
+        # a `Field(...)` default holds the field's settings
+        field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
+        declared = FieldInfo.from_annotated_attribute(annotation, field)
+        if _model_class(annotation, optional=True) is not None:
+            model_params[param_name] = ModelParam(
+                empty_when_unset=model_class is not None and declared.is_required(),
+                declared=declared,
+            )
+
+        described = FieldInfo.from_annotation(annotation).description or field.description
+        if not described and param_name in descriptions:
+            annotation = Annotated[annotation, Field(description=descriptions[param_name])]
+        fields[param_name] = (annotation, field)
+
+        if model_class is None or not is_flat:
+            flag_fields[param_name] = fields[param_name]
+            owners.append((_kebab_case(_raw_key(declared, param_name)), f"`{param_name}`"))
+            continue
+        flag_fields.update(_flat_fields(param_name, model_class, model_params[param_name].instance))
+        keys = [_raw_key(info, name) for name, info in model_class.model_fields.items()]
+        owners.extend((_kebab_case(key), f"`{param_name}: Flat[{model_class.__name__}]`") for key in keys)
+        flat[param_name] = frozenset(keys)
+    _check_flag_names(owners)
+
     model = create_model(
         _pascal_case(fn_name),
         __base__=InputModel,
