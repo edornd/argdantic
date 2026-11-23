@@ -149,19 +149,21 @@ class InputRejected(Exception):
         valid_flags: list[str],
         error: ValidationError | SettingsError | None = None,
         flat: frozenset[str] = frozenset(),
+        positionals: frozenset[str] = frozenset(),
     ) -> Self:
         """
         Every problem with a command's input as one rejection: leftover tokens first, then pydantic's errors.
 
         Args:
             flat: the Flat parameters, whose name the error paths leave out.
+            positionals: the positional parameters, whose errors get `source="positional"`.
         """
         field_errors = _leftover_errors(leftovers, valid_flags)
         if isinstance(error, SettingsError):
             # pydantic-settings names the field only in the message of a malformed JSON value
             return cls(str(error), field_errors)
         if error is not None:
-            field_errors += [_field_error(model, item, flat) for item in error.errors()]
+            field_errors += [_field_error(model, item, flat, positionals) for item in error.errors()]
         return cls("invalid input", field_errors)
 
     @property
@@ -174,7 +176,12 @@ class InputRejected(Exception):
         )
 
 
-def _field_error(model: type[BaseModel], error: ErrorDetails, flat: frozenset[str]) -> FieldError:
+def _field_error(
+    model: type[BaseModel],
+    error: ErrorDetails,
+    flat: frozenset[str],
+    positionals: frozenset[str],
+) -> FieldError:
     loc = error["loc"]
     path = _dotted(loc[1:] if loc and loc[0] in flat else loc)
     if error["type"] == "missing":
@@ -190,7 +197,7 @@ def _field_error(model: type[BaseModel], error: ErrorDetails, flat: frozenset[st
         expected=error.get("ctx", {}).get("expected"),
         received=None if hidden else error["input"],
         allowed=allowed or None,
-        source="flag",
+        source="positional" if loc and loc[0] in positionals else "flag",
     )
 
 

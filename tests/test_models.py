@@ -368,10 +368,10 @@ def _annotated_alias(cfg: Flat[Optim], rate: Annotated[float, Field(alias="lr")]
 @pytest.mark.parametrize(
     ("fn", "match"),
     [
-        (_flat_pair, "`--lr` comes from `optim: Flat\\[Optim\\]` and `sched: Flat\\[Sched\\]`"),
-        (_flat_and_plain, "`--lr` comes from `optim: Flat\\[Optim\\]` and `lr`"),
-        (_alias_and_plain, "`--steps` comes from `cfg: Flat\\[Aliased\\]` and `steps`"),
-        (_annotated_alias, "`--lr` comes from `cfg: Flat\\[Optim\\]` and `rate`"),
+        (_flat_pair, "`optim: Flat\\[Optim\\]` and `sched: Flat\\[Sched\\]` both use the name `lr`"),
+        (_flat_and_plain, "`optim: Flat\\[Optim\\]` and `lr` both use the name `lr`"),
+        (_alias_and_plain, "`cfg: Flat\\[Aliased\\]` and `steps` both use the name `steps`"),
+        (_annotated_alias, "`cfg: Flat\\[Optim\\]` and `rate` both use the name `lr`"),
     ],
 )
 def test_flag_name_clash_raises_at_definition(fn: Any, match: str) -> None:

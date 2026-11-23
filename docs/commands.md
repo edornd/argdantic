@@ -4,7 +4,7 @@
 
 ## Parameters become flags
 
-Each parameter becomes a flag named after it in kebab case: `max_items` becomes `--max-items`. A one-letter parameter gets a short flag: `n` becomes `-n`. pydantic validates every value against the parameter's type hint. Scalar types such as `int`, `Path`, `date`, `Literal` and enums work as flags.
+Each parameter becomes a flag named after it in kebab case, unless it is a [positional](#positionals): `max_items` becomes `--max-items`. A one-letter parameter gets a short flag: `n` becomes `-n`. pydantic validates every value against the parameter's type hint. Scalar types such as `int`, `Path`, `date`, `Literal` and enums work as flags.
 
 - A parameter without a default is required.
 - A parameter with a default is optional.
@@ -24,6 +24,48 @@ def add(
 Flags must be spelled in full. argdantic does not expand a prefix such as `--ti` to `--title`.
 
 Input comes from flags and the defaults in code. A `BaseSettings` parameter also reads environment variables, see [Environment variables](#environment-variables).
+
+## Positionals
+
+`Arg` makes a parameter a positional. Its value goes on the command line by place, with no flag.
+
+```python
+from pathlib import Path
+
+from argdantic import App, Arg
+
+app = App("notes")
+
+
+@app.command
+def tag(label: Arg[str], files: Arg[list[Path]] = [], color: str = "blue") -> list[str]:
+    """
+    Tag note files.
+
+    Args:
+        label: the tag to add.
+        files: the note files to tag.
+        color: the tag color.
+    """
+    return [label, color, *map(str, files)]
+```
+
+```console
+$ notes tag --help
+usage: notes tag [-h] [--color str] LABEL [FILES ...]
+...
+$ notes tag urgent a.md b.md --color red
+["urgent", "red", "a.md", "b.md"]
+```
+
+- `Arg[T]` is required. With a default it is optional.
+- `Arg[list[T]]` takes one or more values. With the default `[]` it takes zero or more. pydantic copies the default for each run, so `[]` is safe here. Add `# noqa: B006` if ruff flags it. Only the last positional can be a list, and a positional with many values must be a typed list, set or dict.
+- A positional-only parameter, before `/` in the signature, is a positional like `Arg[T]`.
+- `*args: T` is a positional that takes one or more values. The command gets them unpacked.
+- Flags go before or after the positionals, not between them. After `--`, a value that starts with `-` is a positional value, not a flag.
+- A positional cannot be a pydantic model.
+
+A missing positional gives a `missing` field error, the same as a missing required flag. Every other parameter is a flag, including a plain `list[T]`.
 
 ## Config models
 
