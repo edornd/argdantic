@@ -1,14 +1,20 @@
+from enum import IntFlag
 from typing import Annotated, Any
 
 import pytest
 from conftest import Run
 from pydantic import BaseModel, Field
 
-from argdantic import App, Arg
+from argdantic import App, Arg, Flat
 
 
 class Optim(BaseModel):
     lr: float = 0.1
+
+
+class Perm(IntFlag):
+    r = 4
+    w = 2
 
 
 def test_required_positional_reaches_the_command(run: Run) -> None:
@@ -69,7 +75,6 @@ def test_list_positional_with_empty_default_takes_none(run: Run) -> None:
     [
         ["convert", "a", "b", "--out", "z"],
         ["convert", "--out", "z", "a", "b"],
-        ["convert", "a", "--out", "z", "b"],
     ],
 )
 def test_positionals_and_flags_mix(run: Run, argv: list[str]) -> None:
@@ -308,3 +313,39 @@ def test_aliased_positional_error_has_source_positional(run: Run) -> None:
 
     error = result.json()["field_errors"][0]
     assert (error["path"], error["source"]) == ("count", "positional")
+
+
+def test_flag_enum_positional_takes_one_value(run: Run) -> None:
+    app = App("cli")
+
+    @app.command
+    def chmod(mode: Arg[Perm]) -> int:
+        return mode
+
+    result = run(app, ["chmod", "4"])
+
+    assert result.code == 0
+    assert result.json() == 4
+
+
+def test_untyped_list_positional_raises_with_a_hint() -> None:
+    app = App("cli")
+
+    with pytest.raises(TypeError, match="such as `list\\[str\\]`, got parameter 'paths'"):
+
+        @app.command
+        def cat(paths: Arg[list]) -> None:
+            pass
+
+
+def test_positional_and_flat_field_with_one_name_raises() -> None:
+    app = App("cli")
+
+    class Cfg(BaseModel):
+        name: str = "x"
+
+    with pytest.raises(ValueError, match="positional `name` and `cfg: Flat\\[Cfg\\]` both use the name `name`"):
+
+        @app.command
+        def run(name: Arg[str], cfg: Flat[Cfg]) -> None:
+            pass

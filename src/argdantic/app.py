@@ -4,6 +4,7 @@ import json
 import types
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from typing import Annotated, Any, NoReturn, TypeVar, Union, get_args, get_origin, overload
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, create_model
@@ -160,10 +161,10 @@ def _is_variadic(annotation: Any) -> bool:
 
 
 def _is_collection(annotation: Any) -> bool:
-    """Whether a value of this type holds many values, `X | None` included. `str` and `bytes` do not count."""
+    """Whether a value of this type holds many values, `X | None` included. `str`, `bytes` and enums do not count."""
     annotation = _without_none(annotation)
     origin = get_origin(annotation) or annotation
-    return isinstance(origin, type) and issubclass(origin, Collection) and not issubclass(origin, str | bytes)
+    return isinstance(origin, type) and issubclass(origin, Collection) and not issubclass(origin, str | bytes | Enum)
 
 
 def _deep_merge(base: Mapping[str, Any] | BaseModel, update: Mapping[str, Any]) -> dict[str, Any]:
@@ -217,13 +218,13 @@ def _annotation(param: inspect.Parameter) -> Any:
     return param.annotation
 
 
-def _check_flag_names(owners: list[tuple[str, str]]) -> None:
-    """Raise when two parameters or Flat fields give the same top-level flag."""
+def _check_names(owners: list[tuple[str, str]]) -> None:
+    """Raise when two parameters or Flat fields use the same top-level name, as a flag or a positional."""
     seen: dict[str, str] = {}
-    for flag, owner in owners:
-        if flag in seen:
-            raise ValueError(f"flag `--{flag}` comes from {seen[flag]} and {owner}")
-        seen[flag] = owner
+    for name, owner in owners:
+        if name in seen:
+            raise ValueError(f"{seen[name]} and {owner} both use the name `{name}`")
+        seen[name] = owner
 
 
 def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
@@ -252,7 +253,8 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
         default = ... if param.default is param.empty else param.default
         field = default if isinstance(default, FieldInfo) else FieldInfo.from_field(default)
         declared = FieldInfo.from_annotated_attribute(annotation, field)
-        if _POSITIONAL in declared.metadata:
+        positional = _POSITIONAL in declared.metadata
+        if positional:
             if _model_class(annotation, optional=True) is not None:
                 raise TypeError(f"a positional cannot be a pydantic model, got parameter '{param_name}'")
             if variadic is not None:
@@ -261,7 +263,10 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
                 )
             if not _is_variadic(declared.annotation) and _is_collection(declared.annotation):
                 # pydantic-settings gives it one value, so every run would fail
-                raise TypeError(f"a positional with many values must be a list, got parameter '{param_name}'")
+                raise TypeError(
+                    f"a positional with many values must be a typed list, set or dict, such as `list[str]`, "
+                    f"got parameter '{param_name}'"
+                )
             variadic = param_name if _is_variadic(declared.annotation) else None
             # pydantic's error loc names the alias
             positionals.append(_raw_key(declared, param_name))
@@ -278,13 +283,14 @@ def _build_spec(fn: Callable[..., Any], hints: SafetyHints) -> CommandSpec:
 
         if model_class is None or not is_flat:
             flag_fields[param_name] = fields[param_name]
-            owners.append((_kebab_case(_raw_key(declared, param_name)), f"`{param_name}`"))
+            owner = f"positional `{param_name}`" if positional else f"`{param_name}`"
+            owners.append((_kebab_case(_raw_key(declared, param_name)), owner))
             continue
         flag_fields.update(_flat_fields(param_name, model_class, model_params[param_name].instance))
         keys = [_raw_key(info, name) for name, info in model_class.model_fields.items()]
         owners.extend((_kebab_case(key), f"`{param_name}: Flat[{model_class.__name__}]`") for key in keys)
         flat[param_name] = frozenset(keys)
-    _check_flag_names(owners)
+    _check_names(owners)
 
     model = create_model(
         _pascal_case(fn_name),

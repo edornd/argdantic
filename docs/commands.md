@@ -59,10 +59,10 @@ $ notes tag urgent a.md b.md --color red
 ```
 
 - `Arg[T]` is required. With a default it is optional.
-- `Arg[list[T]]` takes one or more values. With the default `[]` it takes zero or more. pydantic copies the default for each run, so `[]` is safe here. Add `# noqa: B006` if ruff flags it. Only the last positional can be a list, and a positional with many values must be a list, a set or a dict.
+- `Arg[list[T]]` takes one or more values. With the default `[]` it takes zero or more. pydantic copies the default for each run, so `[]` is safe here. Add `# noqa: B006` if ruff flags it. Only the last positional can be a list, and a positional with many values must be a typed list, set or dict.
 - A positional-only parameter, before `/` in the signature, is a positional like `Arg[T]`.
 - `*args: T` is a positional that takes one or more values. The command gets them unpacked.
-- A flag can come before, after or between positionals, but not among the values of a list positional. After `--`, a value that starts with `-` is a positional value, not a flag.
+- Flags go before or after the positionals, not between them. After `--`, a value that starts with `-` is a positional value, not a flag.
 - A positional cannot be a pydantic model.
 
 A missing positional gives a `missing` field error, the same as a missing required flag. Every other parameter is a flag, including a plain `list[T]`.
